@@ -5,62 +5,53 @@
  * 타입을 그대로 가정해도 된다. 추측이 어긋나 병합에서 무너지는 것을 막기 위한 파일이다.
  */
 
-/** 집안일 항목 (모든 패킷이 참조) (구현: 패킷 0001) */
-export type Task = { id: string; assignee: string; description: string; frequency: 'daily'|'weekly'; category?: string; createdAt: number; archivedAt?: number };
+/** 과제 기본 도메인 엔티티 — 모든 패킷에서 참조 (구현: 패킷 0001) */
+export type Task = { id: string; name: string; assigneeId: string; frequencyDays: number; description?: string; createdAt: string; updatedAt: string };
 
-/** 구성원 (0007, 0008에서 CRUD) (구현: 패킷 0001) */
-export type Member = { id: string; name: string; joinedAt: number; shareCode?: string; targetRatio?: number };
+/** 가구원 도메인 엔티티 (구현: 패킷 0001) */
+export type Member = { id: string; name: string; householdId: string; joinedAt: string };
 
-/** 체크인 기록 (도메인 계산에 필요) (구현: 패킷 0001) */
-export type CheckinLog = { id: string; taskId: string; memberId: string; date: string; completedAt: number };
+/** 가구 도메인 엔티티 (구현: 패킷 0001) */
+export type Household = { id: string; name: string; createdAt: string; memberIds: string[] };
 
-/** 라우터 상태 (0021에서 사용, 0022에서 검증) (구현: 패킷 0001) */
-export type RouteState = { type: string; params?: Record<string, any>; title?: string };
+/** 라우트 간 상태 전달 용 제네릭 dict (구현: 패킷 0001) */
+export type RouteState = { [key: string]: string | number | boolean | null };
 
-/** 스토어에서 값 읽기 (0007, 0008에서 사용) (구현: 패킷 0002) */
-export type safeGetFn = <T>(key: string, fallback: T) => T;
+/** 로컬 스토리지 안전 읽기 — 스키마 검증 포함 (구현: 패킷 0002) */
+export type safeGetFn = <T = any>(key: string) => Promise<T | null>;
 
-/** 스토어에 값 저장 (0007, 0008에서 사용) (구현: 패킷 0002) */
-export type safeSetFn = (key: string, value: any) => Promise<void>;
+/** 로컬 스토리지 안전 쓰기 (구현: 패킷 0002) */
+export type safeSetFn = <T = any>(key: string, value: T) => Promise<void>;
 
-/** 오래된 로그 삭제 (0008에서 부팅 시 호출) (구현: 패킷 0002) */
-export type pruneLogsFn = (beforeDays: number) => Promise<number>;
+/** 만료된 로그 삭제 — 반환값은 삭제된 레코드 수 (구현: 패킷 0002) */
+export type pruneLogsFn = (olderThanDays: number) => Promise<number>;
 
-/** 현재 또는 주어진 시간의 KST 날짜 (구현: 패킷 0003) */
-export type getKSTDateFn = (timestamp?: number) => Date;
+/** KST 기준 주 경계(월~일) 계산 (구현: 패킷 0003) */
+export type getWeekBoundaryFn = (date?: Date) => { start: Date; end: Date };
 
-/** 해당 주의 시작일 (월요일) (구현: 패킷 0003) */
-export type getWeekStartFn = (date: Date) => Date;
+/** KST 타임존 포맷팅 — 기본값 'YYYY-MM-DD' (구현: 패킷 0003) */
+export type formatDateKSTFn = (date: Date, format?: string) => string;
 
-/** 해당 주의 종료일 (일요일) (구현: 패킷 0003) */
-export type getWeekEndFn = (date: Date) => Date;
+/** 구성원 공정성 점수(0~100) — 순수 함수 (구현: 패킷 0004) */
+export type calculateFairnessFn = (tasks: Task[], memberId: string, weekStartDate: Date) => number;
 
-/** 날짜 문자열 포맷팅 (UI에서 표시용) (구현: 패킷 0003) */
-export type formatDateFn = (date: Date, format: 'YYYY-MM-DD'|'M월 D일') => string;
+/** 미이행 집계 — 리스트 반환 (구현: 패킷 0005) */
+export type aggregateFinesFn = (period: { start: Date; end: Date }) => Array<{ memberId: string; amountKrw: number; reason: string }>;
 
-/** 공정성 점수 계산 (0006, 0015, 0016, 0018에서 사용) (구현: 패킷 0004) */
-export type calculateFairnessScoreFn = (memberId: string, checkins: CheckinLog[], tasks: Task[]) => number;
+/** 정산 제안 — 이체 순서 (구현: 패킷 0005) */
+export type proposeLedgerFn = (fines: Array<{ memberId: string; amountKrw: number }>) => Array<{ from: string; to: string; amountKrw: number }>;
 
-/** 미이행으로 인한 벌금 계산 (0017에서 사용) (구현: 패킷 0005) */
-export type calculateFinesOwedFn = (memberId: string, checkins: CheckinLog[], tasks: Task[], finePerMiss: number) => number;
+/** 연속 체크인 일수 — 오늘 기준 (구현: 패킷 0006) */
+export type calculateStreakFn = (memberId: string, endDate?: Date) => number;
 
-/** 정산 제안 생성 (0017에서 사용) (구현: 패킷 0005) */
-export type generateSettlementFn = (members: Member[], checkins: CheckinLog[], tasks: Task[]) => { from: string; to: string; amount: number }[];
+/** 주간 랭킹 정렬 리스트 — 점수 내림차순 (구현: 패킷 0006) */
+export type calculateWeeklyRankingFn = (weekStartDate: Date, householdId: string) => Array<{ rank: number; memberId: string; score: number }>;
 
-/** 연속 완료 일수 (0018에서 표시) (구현: 패킷 0006) */
-export type calculateStreakFn = (memberId: string, checkins: CheckinLog[], date?: Date) => number;
+/** 전역 앱 상태 훅 — 모든 페이지에서 필수 (구현: 패킷 0008) */
+export type useAppStateFn = () => { household: Household | null; members: Member[]; tasks: Task[]; checkins: Array<{ taskId: string; memberId: string; date: string }> };
 
-/** 주간 랭킹 계산 (0015, 0018에서 사용) (구현: 패킷 0006) */
-export type getWeeklyRankingsFn = (members: Member[], checkins: CheckinLog[], tasks: Task[]) => { memberId: string; rank: number; score: number }[];
+/** 저장 실패 알림 용 훅 (구현: 패킷 0008) */
+export type useSaveErrorFn = () => { error: Error | null; clear: () => void };
 
-/** 새 항목 생성 (0008에서 액션 제공) (구현: 패킷 0007) */
-export type createTaskFn = (task: Omit<Task, 'id'|'createdAt'>) => Promise<Task>;
-
-/** 항목 수정 (0008에서 액션 제공) (구현: 패킷 0007) */
-export type updateTaskFn = (id: string, updates: Partial<Task>) => Promise<void>;
-
-/** 항목 삭제 (0008에서 액션 제공) (구현: 패킷 0007) */
-export type deleteTaskFn = (id: string) => Promise<void>;
-
-/** 초대 공유코드 생성 (0019에서 사용) (구현: 패킷 0007) */
-export type generateShareCodeFn = (groupId: string) => string;
+/** 라우트 간 전달 상태 접근 — useSearchParams 기반 (구현: 패킷 0022) */
+export type useRouteStateFn = <T = RouteState>(name: string) => T | null;
