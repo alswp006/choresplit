@@ -210,10 +210,18 @@ export function toggleChoreActive(state: ChoreSplitState, choreId: ChoreId): Res
   return { ok: true };
 }
 
-/** 동거인 추가 (최대 4명, 미사용 색상 토큰 우선 배정) */
+/** 동거인 추가 (최대 4명, 이름 중복 금지, 미사용 색상 토큰 우선 배정) */
 export function addMember(state: ChoreSplitState, name: string): Result {
   if (state.members.length >= MAX_MEMBERS) {
     return { ok: false, error: "동거인은 최대 4명까지 등록할 수 있어요" };
+  }
+
+  const normalized = name.trim();
+  const isDuplicate = state.members.some(
+    (m) => m.name.trim().toLowerCase() === normalized.toLowerCase()
+  );
+  if (isDuplicate) {
+    return { ok: false, error: "같은 이름이 이미 있어요" };
   }
 
   const usedColors = new Set(state.members.map((m) => m.colorToken));
@@ -221,7 +229,7 @@ export function addMember(state: ChoreSplitState, name: string): Result {
 
   state.members.push({
     id: newId("m_"),
-    name: name.trim(),
+    name: normalized,
     colorToken,
     isMe: false,
     createdAt: new Date().toISOString(),

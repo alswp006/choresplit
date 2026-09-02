@@ -14,15 +14,32 @@ const ROUTES: { path: string; name: string }[] = [
   { path: "/", name: "home" },
   { path: "/onboarding", name: "onboarding" },
   { path: "/chores", name: "chores" },
+  { path: "/members", name: "members" },
   // { path: "/result", name: "result" },   // ← 이 앱의 라우트를 추가
   // { path: "/settings", name: "settings" },
 ];
 
+/** /members는 household가 없으면 /onboarding으로 리다이렉트하므로 가구+동거인을 시드한다. */
+const MEMBERS_SEED_STATE = {
+  version: 1,
+  household: { id: "h_smoke01", name: "우리집", inviteCode: "AB12CD", createdAt: "2026-01-01T00:00:00.000Z" },
+  members: [
+    { id: "m_smoke1", name: "민수", colorToken: "blue", isMe: true, createdAt: "2026-01-01T00:00:00.000Z" },
+    { id: "m_smoke2", name: "지민", colorToken: "green", isMe: false, createdAt: "2026-01-02T00:00:00.000Z" },
+  ],
+  chores: [],
+  checkIns: [],
+  settings: { reminderEnabled: true, reminderHour: 21, penaltyEnabled: true, lastReminderShownDate: null },
+  settlements: [],
+};
+
 /** 데이터가 필요한 화면용 localStorage 시드(앱에 맞게 채워라). 앱 스크립트보다 먼저 실행된다. */
 async function seed(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    // window.localStorage.setItem("MY_STORAGE_KEY", JSON.stringify({ /* ... */ }));
-  });
+  await page.addInitScript((state) => {
+    if (window.location.pathname === "/members") {
+      window.localStorage.setItem("choresplit:v1", JSON.stringify(state));
+    }
+  }, MEMBERS_SEED_STATE);
 }
 
 // 토스 WebView 밖(일반 브라우저)에서만 나는 알려진 dev 에러 — 무시(실기기 WebView엔 안 남)
