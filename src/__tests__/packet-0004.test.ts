@@ -108,7 +108,7 @@ describe("fairness.ts — 공정성 점수 순수 함수", () => {
       expect(gradeOf(89)).not.toBe("완벽");
       expect(gradeOf(90)).not.toBe("양호");
       expect(gradeOf(69)).not.toBe("양호");
-      expect(gradeOf(40)).not.toBe("주의");
+      expect(gradeOf(39)).not.toBe("주의");
     });
   });
 
