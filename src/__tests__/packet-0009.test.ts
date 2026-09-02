@@ -201,7 +201,7 @@ describe("집안일 항목 관리 /chores (S3)", () => {
       const Chores = await loadChores();
       renderWithRouter(React.createElement(Chores));
 
-      expect(screen.getAllByRole("listitem").length).toBe(0);
+      expect(screen.queryAllByRole("listitem").length).toBe(0);
       const emptyCta = screen.getAllByRole("button").find((b) => b.textContent?.includes("추가"));
       expect(emptyCta).toBeDefined();
 
