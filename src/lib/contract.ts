@@ -3,64 +3,77 @@
  *
  * 기반 패킷은 여기 선언된 모양 그대로 구현하고, 화면 패킷은 여기 적힌 이름·인자·반환
  * 타입을 그대로 가정해도 된다. 추측이 어긋나 병합에서 무너지는 것을 막기 위한 파일이다.
+ *
+ * 엔티티/파생 타입은 src/lib/types.ts(SPEC Data Models 원본)를 그대로 재노출한다 —
+ * 이 파일에서 별도로 재정의하지 않아 두 파일이 어긋날 수 없다.
  */
 
-/** 가구 엔티티 - 모든 패킷의 데이터 루트 (구현: 패킷 0001) */
-export type Household = { id: string; name: string; ownerId: string; members: Member[]; chores: Chore[]; createdAt: string };
+export type {
+  MemberId,
+  ChoreId,
+  CheckInId,
+  ColorToken,
+  Member,
+  Chore,
+  CheckIn,
+  Household,
+  Settings,
+  SettlementRecord,
+  ChoreSplitState,
+  MemberWeekStat,
+  WeeklyReport,
+  SaveResult,
+  RouteState,
+} from './types';
 
-/** 동거인 - Household.members[]에 포함 (구현: 패킷 0001) */
-export type Member = { id: string; name: string; role: 'owner' | 'member'; joinedAt: string };
+import type {
+  ChoreSplitState,
+  Member,
+  MemberWeekStat,
+  SettlementRecord,
+  Settings,
+  SaveResult,
+  WeeklyReport,
+} from './types';
 
-/** 집안일 - Household.chores[]에 포함 (구현: 패킷 0001) */
-export type Chore = { id: string; name: string; frequency: 'daily' | 'weekly'; assignee?: string; lastCompleted?: string; createdAt: string };
+/** localStorage에서 전체 상태 로드 — 키 없음/파싱 실패 시 기본값 반환 (구현: 패킷 0002) */
+export type loadStateFn = () => ChoreSplitState;
 
-/** 체크인 기록 - 리포트/스트릭 계산 입력 (구현: 패킷 0001) */
-export type CheckIn = { id: string; choreId: string; memberId: string; date: string; completedAt: string };
+/** localStorage에 전체 상태 저장 — 120일 초과 checkIns 정리 후 직렬화 (구현: 패킷 0002) */
+export type saveStateFn = (state: ChoreSplitState) => SaveResult;
 
-/** 주간 리포트 요약 (구현: 패킷 0001) */
-export type WeeklyReport = { week: string; householdId: string; choreStats: { choreId: string; completed: number; assigned: number }[]; memberEarnings: { memberId: string; earned: number }[]; penalties: { memberId: string; amount: number }[] };
-
-/** 멤버 랭킹 엔트리 (구현: 패킷 0001) */
-export type Ranking = { memberId: string; name: string; score: number; streak: number; position: number };
-
-/** 앱 네비게이션 상태 (구현: 패킷 0001) */
-export type RouteState = 'onboarding' | 'home' | 'chores' | 'members' | 'report' | 'report-detail' | 'settle' | 'streak' | 'settings';
-
-/** localStorage에서 가구 로드 (구현: 패킷 0002) */
-export type loadHouseholdFn = () => Household | null;
-
-/** localStorage에 가구 저장 (구현: 패킷 0002) */
-export type saveHouseholdFn = (household: Household) => void;
-
-/** localStorage에서 체크인 목록 로드 (구현: 패킷 0002) */
-export type loadCheckInsFn = () => CheckIn[];
-
-/** localStorage에 체크인 목록 저장 (구현: 패킷 0002) */
-export type saveCheckInsFn = (checkIns: CheckIn[]) => void;
-
-/** 새 가구 생성 (Onboarding에서 사용) (구현: 패킷 0003) */
-export type createHouseholdFn = (name: string, ownerName: string) => Household;
-
-/** 기본 집안일 템플릿 추가 (구현: 패킷 0003) */
-export type seedDefaultChoresFn = (household: Household) => Household;
+/** 새 가구 생성 + 본인 멤버 + 기본 집안일 6종 시드 (Onboarding에서 사용) (구현: 패킷 0003) */
+export type createHouseholdFn = (name: string, myName: string) => ChoreSplitState;
 
 /** 주간 리포트 계산 (구현: 패킷 0004) */
-export type calculateWeeklyReportFn = (household: Household, checkIns: CheckIn[], weekStart: string) => WeeklyReport;
+export type buildWeeklyReportFn = (state: ChoreSplitState, weekStart: string) => WeeklyReport;
 
-/** 벌금 정산액 계산 (구현: 패킷 0004) */
-export type calculateSettlementsFn = (report: WeeklyReport, householdMembers: Member[]) => { memberId: string; amountKrw: number }[];
+/** 벌금 정산 계산 — 누가 누구에게 얼마를 보내야 하는지(SettlementRecord.lines와 동일 모양) (구현: 패킷 0004) */
+export type computeSettlementFn = (
+  report: WeeklyReport,
+  members: Member[]
+) => {
+  totalPenalty: number;
+  burdens: Array<{ memberId: string; amount: number }>;
+  lines: SettlementRecord['lines'];
+};
 
 /** 멤버 연속 달성 일수 (구현: 패킷 0005) */
-export type calculateStreakFn = (memberId: string, checkIns: CheckIn[]) => number;
+export type getStreakFn = (state: ChoreSplitState, memberId: string, today?: string) => number;
 
-/** 모든 멤버의 랭킹 순위 계산 (내림차순) (구현: 패킷 0005) */
-export type calculateRankingsFn = (household: Household, checkIns: CheckIn[]) => Ranking[];
+/** 최근 N일 랭킹 — 가중 점수 내림차순 (구현: 패킷 0005) */
+export type getRankingFn = (state: ChoreSplitState, days?: number) => MemberWeekStat[];
 
-/** 전역 상태에서 가구 조회 훅 (구현: 패킷 0006) */
-export type useHouseholdFn = () => Household | null;
+/** 전역 상태 훅 — loading/mutate(낙관적 업데이트+롤백)/unlocked 포함 (구현: 패킷 0006) */
+export type useAppStateFn = () => {
+  state: ChoreSplitState;
+  loading: boolean;
+  mutate: (
+    fn: (s: ChoreSplitState) => { ok: true; state: ChoreSplitState } | { ok: false; error: string }
+  ) => { ok: boolean; error?: string };
+  unlocked: Record<string, true>;
+  unlock: (weekStart: string) => void;
+};
 
-/** 전역 상태에서 체크인 목록 조회 훅 (구현: 패킷 0006) */
-export type useCheckInsFn = () => CheckIn[];
-
-/** 전역 상태 변경 액션 훅 (구현: 패킷 0006) */
-export type useStoreActionsFn = () => { addCheckIn: (choreId: string, memberId: string) => Promise<void>; updateHousehold: (updates: Partial<Household>) => Promise<void>; setRoute: (route: RouteState) => void };
+/** Settings 참조용 별칭 (일부 화면 패킷의 setter 시그니처에서 사용) (구현: 패킷 0002) */
+export type SettingsPatch = Partial<Settings>;
