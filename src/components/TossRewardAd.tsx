@@ -15,7 +15,9 @@ interface TossRewardAdProps {
   /** 광고 버튼 텍스트 */
   buttonText?: string;
   /** 광고 시청 완료 콜백 */
-  onRewarded?: () => void;
+  onReward?: () => void;
+  /** 광고 로드/시청 실패 콜백(정책상 실패해도 자동 언락은 되지만, 화면에 안내를 띄우고 싶을 때) */
+  onError?: () => void;
   /** 광고 로드 타임아웃 (ms). 초과 시 자동 언락 */
   timeoutMs?: number;
 }
@@ -39,7 +41,8 @@ export function TossRewardAd({
   children,
   description = "광고를 시청하면 결과를 확인할 수 있어요",
   buttonText = "광고 보고 확인하기",
-  onRewarded,
+  onReward,
+  onError,
   timeoutMs = 15000,
 }: TossRewardAdProps) {
   const [unlocked, setUnlocked] = useState(false);
@@ -56,13 +59,14 @@ export function TossRewardAd({
         onError: () => {
           // Load failed (e.g., local browser) — auto-unlock
           setUnlocked(true);
-          onRewarded?.();
+          onReward?.();
+          onError?.();
         },
       } as Parameters<typeof loadFullScreenAd>[0]);
     } catch {
       // SDK not available (e.g., jsdom) — auto-unlock
       setUnlocked(true);
-      onRewarded?.();
+      onReward?.();
     }
 
     return () => {
@@ -81,7 +85,7 @@ export function TossRewardAd({
     // Timeout fallback
     timeoutRef.current = setTimeout(() => {
       setUnlocked(true);
-      onRewarded?.();
+      onReward?.();
     }, timeoutMs);
 
     try {
@@ -94,10 +98,10 @@ export function TossRewardAd({
           setUnlocked(true);
           setIsShowing(false);
           if (event?.type === "rewarded" || event?.type === "completed") {
-            onRewarded?.();
+            onReward?.();
           } else {
             // dismissed or other — still unlock for UX (policy: gate only final payoff)
-            onRewarded?.();
+            onReward?.();
           }
         },
         onError: () => {
@@ -105,7 +109,8 @@ export function TossRewardAd({
           // Playback failed — unlock as fallback
           setUnlocked(true);
           setIsShowing(false);
-          onRewarded?.();
+          onReward?.();
+          onError?.();
         },
       } as Parameters<typeof showFullScreenAd>[0]);
     } catch {
@@ -113,7 +118,7 @@ export function TossRewardAd({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setUnlocked(true);
       setIsShowing(false);
-      onRewarded?.();
+      onReward?.();
     }
   };
 
