@@ -163,15 +163,27 @@ describe("AC-3: checkIns pruning (120 days)", () => {
   it("AC-3[P0]: should remove checkIns older than 120 days and keep those within 120 days", async () => {
     const { saveState, loadState, todayKST } = await import("@/lib/storage");
 
+    // NOTE: toISOString() converts to UTC and can shift the calendar date by one
+    // day relative to local/KST time (e.g. KST 05:00 is still the previous day in
+    // UTC), producing an off-by-one vs. production's KST-based pruneOlderThan().
+    // Use local date components (matches todayKST()'s own local-time approach)
+    // instead of toISOString() to compute "N days ago" as a KST YYYY-MM-DD string.
+    const toDateKey = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+
     const today = todayKST();
     const date120DaysAgo = new Date(new Date().setDate(new Date().getDate() - 120));
-    const dateKST120 = date120DaysAgo.toISOString().split("T")[0]; // "YYYY-MM-DD"
+    const dateKST120 = toDateKey(date120DaysAgo);
 
     const date121DaysAgo = new Date(new Date().setDate(new Date().getDate() - 121));
-    const dateKST121 = date121DaysAgo.toISOString().split("T")[0];
+    const dateKST121 = toDateKey(date121DaysAgo);
 
     const date30DaysAgo = new Date(new Date().setDate(new Date().getDate() - 30));
-    const dateKST30 = date30DaysAgo.toISOString().split("T")[0];
+    const dateKST30 = toDateKey(date30DaysAgo);
 
     // Setup: state with checkIns at various ages
     const stateWithCheckIns: ChoreSplitState = {

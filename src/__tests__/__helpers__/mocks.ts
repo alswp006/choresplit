@@ -140,11 +140,15 @@ export function mockTds() {
         React.createElement(
           "nav",
           { role: "navigation" },
-          title && React.createElement("h1", null, title),
+          title,
           children,
         ),
       {
         TitleParagraph: ({ children }: any) => React.createElement("h1", null, children),
+        TitleTextButton: ({ children, onClick }: any) =>
+          React.createElement("button", { onClick }, React.createElement("h1", null, children)),
+        TitleSelector: ({ children, onClick }: any) =>
+          React.createElement("button", { onClick }, React.createElement("h1", null, children)),
       },
     ),
 
