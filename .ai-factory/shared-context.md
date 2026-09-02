@@ -198,6 +198,7 @@ export interface MemberWeekStat {
   components/
     AdSlot.tsx
     Amount.tsx
+    BannerSection.tsx
     BottomCTA.tsx
     Card.tsx
     CountUp.tsx
@@ -211,8 +212,10 @@ export interface MemberWeekStat {
     TossPurchase.tsx
     TossRewardAd.tsx
   hooks/
+    useHaptic.ts
   lib/
     contract.ts
+    env.ts
     household.ts
     report.ts
     storage.ts
@@ -239,7 +242,8 @@ export interface MemberWeekStat {
   vite-env.d.ts
 
 ### Exports (src/lib/)
-- contract.ts: export type loadStateFn = () => ChoreSplitState; export type saveStateFn = (state: ChoreSplitState) => SaveResult; export type createHouseholdFn = (name: string, myName: string) => ChoreSplitState; export type buildWeeklyReportFn = (state: ChoreSplitState, weekStart: string) => WeeklyReport; export type computeSettlementFn = ( report: WeeklyReport, members: Member[] ) =>; export type getStreakFn = (state: ChoreSplitState, memberId: string, today?: string) => number; export type getRankingFn = (state: ChoreSplitState, days?: number) => MemberWeekStat[]; export type useAppStateFn = () =>
+- contract.ts: export type Household =; export type Chore =; export type Member =; export type CheckIn =; export type WeeklyReport =; export type Settlement =; export type RouteState = 'onboarding' | 'home' | 'chores' | 'members' | 'report' | 'streak' | 'settings'; export type addChoreFn = (householdId: string, input:
+- env.ts: export const AD_GROUP_ID: string | undefined = readEnv("VITE_TOSS_AD_GROUP_ID"); export const AD_SLOT_ID: string | undefined = readEnv("VITE_TOSS_AD_SLOT_ID")
 - household.ts: export function seedDefaultChores(): Chore[]; export function createHousehold( name: string, myName: string ): ChoreSplitState &; export function validateOnboarding( householdName: string, memberName: string ):; export interface AddChoreInput; export function addChore(state: ChoreSplitState, input: AddChoreInput): Result; export function updateChore( state: ChoreSplitState, choreId: ChoreId, patch: Partial<Pick<Chore, "name" | "weight" | "f; export function toggleChoreActive(state: ChoreSplitState, choreId: ChoreId): Result; export function addMember(state: ChoreSplitState, name: string): Result
 - report.ts: export function getWeekStart(date: string): string; export function getWeekEnd(date: string): string; export function buildWeeklyReport( state: ChoreSplitState, weekStart: string ): WeeklyReport; export function computeSettlement( report: WeeklyReport, members: Member[] ):; export function buildSettlement( state: ChoreSplitState, weekStart: string ):
 - storage.ts: export const DEFAULT_STATE: ChoreSplitState =; export function getItem<T>(key: string): T | null; export function setItem<T>(key: string, value: T): void; export function removeItem(key: string): void; export function loadState(): ChoreSplitState; export function saveState(state: ChoreSplitState): SaveResult; export function loadUnlocked(): Record<string, true>; export function unlockWeek(weekStart: string): void
@@ -250,6 +254,7 @@ export interface MemberWeekStat {
 ### Components (src/components/)
 - AdSlot.tsx: AdSlot
 - Amount.tsx: Amount
+- BannerSection.tsx: BannerSection
 - BottomCTA.tsx: SubmitFooter, ButtonStack
 - Card.tsx: Card
 - CountUp.tsx: CountUp
@@ -269,7 +274,7 @@ export interface MemberWeekStat {
   pages/Home.tsx → imports: components/ScreenScaffold, components/SummaryHero, components/Card, components/CountUp, components/StateView, components/AdSlot, components/FloatingTabBar, lib/store, lib/storage, lib/streak, lib/types
   pages/Members.tsx → imports: components/ScreenScaffold, components/Card, components/StateView, components/BottomCTA, lib/store, lib/household, lib/report, lib/storage, lib/types
   pages/Onboarding.tsx → imports: components/ScreenScaffold, components/Card, components/BottomCTA, lib/store, lib/household
-  pages/Report.tsx → imports: components/ScreenScaffold, components/Card, components/Amount, components/StateView,...
+  pages/Report.tsx → imports: components/ScreenScaffold, components/Card, components/Amount, components/StateView, components/AdSlot, components/Tos...
 CRITICAL: Before creating any new function, type, or component, check the list above. If something similar exists, import and use it.
 
 ## Already Implemented (do NOT duplicate or overwrite)
@@ -287,6 +292,85 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 - 0012: 주간 리포트 상세 /report/detail (S6) (files: src/pages/ReportDetail.tsx)
 - 0013: 벌금 정산 제안 /settle (S7) (files: src/pages/Settle.tsx)
 - 0014: 스트릭·랭킹 /streak (S8) (files: src/pages/Streak.tsx)
+- 0001: 타입 정의 (엔티티 + 파생 + RouteState) (files: src/lib/types.ts)
+- 0002: localStorage 저장소 모듈 (storage.ts) (files: src/lib/storage.ts)
+- 0003: 가구 생성·시드 + 엔티티 mutation 헬퍼 (files: src/lib/household.ts)
+- 0004: 주간 리포트 계산 엔진 + 정산 계산 (files: src/lib/report.ts)
+- 0005: 스트릭·랭킹 계산 + 리마인더 판정 (files: src/lib/streak.ts)
+- 0006: 앱 전역 상태 컨테이너 (Context) (files: src/lib/store.tsx)
+- 0007: 온보딩 페이지 /onboarding (S1) (files: src/pages/Onboarding.tsx)
+- 0008: 홈(오늘 체크인) / (S2) (files: src/pages/Home.tsx)
+- 0009: 집안일 항목 관리 /chores (S3) (files: src/pages/Chores.tsx)
+- 0010: 동거인 관리 /members (S4) (files: src/pages/Members.tsx)
+- 0011: 주간 리포트 게이트 /report (S5) (files: src/pages/Report.tsx)
+- 0012: 주간 리포트 상세 /report/detail (S6) (files: src/pages/ReportDetail.tsx)
+- 0013: 벌금 정산 제안 /settle (S7) (files: src/pages/Settle.tsx)
+- 0014: 스트릭·랭킹 /streak (S8) (files: src/pages/Streak.tsx)
+- heal-1-03: 광고/햅틱 공용 모듈 + 검수 준수 스윕 (0017) (files: src/lib/env.ts, src/components/BannerSection.tsx, src/hooks/useHaptic.ts)
+
+## Available exports from existing files
+// src/App.tsx
+export default function App() {
+
+// src/components/AdSlot.tsx
+export function AdSlot({ adGroupId, className, variant, theme }: AdSlotProps) {
+
+// src/components/Amount.tsx
+export function Amount({
+
+// src/components/BannerSection.tsx
+export function BannerSection({ adGroupId }: { adGroupId?: string }) {
+
+// src/components/BottomCTA.tsx
+export function SubmitFooter({
+export function ButtonStack({
+
+// src/components/Card.tsx
+export function Card({
+
+// src/components/CountUp.tsx
+export function CountUp({
+
+// src/components/FloatingTabBar.tsx
+export type TabItem = {
+export function FloatingTabBar({ items }: { items: TabItem[] }) {
+
+// src/components/MiniBar.tsx
+export function MiniBar({
+
+// src/components/PageShell.tsx
+export function PageShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
+
+// src/components/ScreenScaffold.tsx
+export function ScreenScaffold({
+
+// src/components/Sparkline.tsx
+export function Sparkline({
+
+// src/components/StateView.tsx
+export function EmptyState({
+export function LoadingState({
+
+// src/components/SummaryHero.tsx
+export function SummaryHero({
+
+// src/components/TossPurchase.tsx
+export interface TossPurchaseResult {
+export function TossPurchase({
+
+// src/components/TossRewardAd.tsx
+export function TossRewardAd({
+
+// src/hooks/useHaptic.ts
+export function useHaptic() {
+
+// src/lib/contract.ts
+export type Household = { id: string; name: string; members: string[]; createdAt: string };
+export type Chore = { id: string; householdId: string; title: string; category: string; dueDate?: string; completed: boolean };
+export type Member = { id: string; householdId: string; name: string; joinedAt: string };
+export type CheckIn = { id: string; memberId: string; choreId: string; date: string; completed: boolean };
+export type WeeklyReport = { week: number; startDate: string; endDate: string; stats: Record<string, { completed: number; total: number }> };
+export type Settlement = { fromMember: string; toMember: stri
 
 ## Memory Index (자동 학습 — 힌트로만 사용, 실제 코드 확인 필수)
 
