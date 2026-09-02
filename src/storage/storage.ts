@@ -76,6 +76,10 @@ export function safeSet<T>(key: string, value: T): SetResult {
   }
 }
 
+export function removeItem(key: string): void {
+  localStorage.removeItem(key);
+}
+
 export function readSchema(): { compatible: boolean } {
   const raw = localStorage.getItem(STORAGE_KEYS.SCHEMA);
   if (raw === null) return { compatible: false };
