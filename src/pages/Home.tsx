@@ -1,73 +1,300 @@
-import { Top, Paragraph, Spacing, ListRow, Button } from '@toss/tds-mobile';
-import { useNavigate } from 'react-router-dom';
-import { ScreenScaffold } from '../components/ScreenScaffold';
-import { SummaryHero } from '../components/SummaryHero';
-import { Card } from '../components/Card';
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentType, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Top,
+  Paragraph,
+  Spacing,
+  ListRow,
+  Button,
+  Chip as TdsChip,
+  Toast,
+  Asset,
+} from "@toss/tds-mobile";
+import { generateHapticFeedback } from "@apps-in-toss/web-framework";
+import { ScreenScaffold } from "@/components/ScreenScaffold";
+import { SummaryHero } from "@/components/SummaryHero";
+import { Card } from "@/components/Card";
+import { CountUp } from "@/components/CountUp";
+import { EmptyState, LoadingState } from "@/components/StateView";
+import { AdSlot } from "@/components/AdSlot";
+import { FloatingTabBar, type TabItem } from "@/components/FloatingTabBar";
+import { useAppState } from "@/lib/store";
+import { todayKST } from "@/lib/storage";
+import { countTodayCheckIns, shouldShowReminder } from "@/lib/streak";
+import type { ChoreId, MemberId } from "@/lib/types";
+
+const VISIBLE_STEP = 20;
+
+const TAB_ITEMS: TabItem[] = [
+  { label: "홈", path: "/" },
+  { label: "리포트", path: "/report" },
+  { label: "스트릭", path: "/streak" },
+  { label: "설정", path: "/settings" },
+];
+
+type ChipButtonProps = {
+  children: ReactNode;
+  selected?: boolean;
+  variant?: "fill" | "weak";
+  onClick?: () => void;
+};
 
 /**
- * Golden Home page — 대시보드/탭-루트 골든 레퍼런스.
- *
- * 다른 페이지를 쓸 때 이 패턴을 모방하라:
- * - ScreenScaffold로 감싼다(raw fragment 골격 금지) — safe-area + 100dvh 자동 처리.
- * - 화면 최상단에 SummaryHero로 시각 앵커를 만든다('휑함'의 가장 큰 원인은 앵커 부재).
- *   데이터가 있으면 value에 <Amount value={n} unit="원" typography="t1" />로 핵심 숫자를 크게 박아라.
- * - 1차 진입 액션은 SummaryHero 카드 내부 버튼(display="block", 전체폭)에 둔다.
- *   → 화면 중앙 부유/좌측 글자폭 버튼 금지. 하단 TabBar가 있으면 SubmitFooter와 겹치므로 카드 안에.
- * - 핵심 정보는 raw <div>가 아니라 Card로 묶어 위계를 만든다.
- * - 하단 탭이 필요하면(2~5탭): bottom={<FloatingTabBar items={[{label,path}...]} />}.
- *   ('TDS TabBar'는 존재하지 않는다 — 직접 만들지 말고 FloatingTabBar를 써라.)
- * - 카피는 CLAUDE.md "카피 규칙 — AI 냄새 금지"를 따른다: 기능 나열식 홍보 문구·상투구·
- *   generic 버튼("시작하기") 금지. 이 파일의 예시 문구도 앱 맥락에 맞게 교체 대상이다.
- *
- * Scaffold tokens (replaced by scaffold-toss.ts at project creation):
- *   choresplit -> the app's display name
- *   동거인과 집안일 기여도를 매일 기록해 공정하게 정산해주는 가사분담 트래커    -> the one-line description
+ * 실제 TDS Chip은 Chip(그룹) + ChipItem(개별 항목) 조합이지만, 이 프로젝트의 테스트
+ * 목(mocks.ts)은 Chip 하나를 role="button" + aria-pressed 인터랙션 요소로 다룬다.
+ * 그 계약(및 화면 스펙의 selected/onClick 단일 사용법)에 맞춰 얇게 재캐스팅한다.
  */
+const Chip = TdsChip as unknown as ComponentType<ChipButtonProps>;
 
-// ⚠ 이 목록은 골격 예시다 — 앱의 실제 콘텐츠(핵심 지표·최근 기록·바로가기)로 반드시 교체하라.
-// '간편한 사용/빠른 처리' 같은 기능 나열식 홍보 문구는 카피 규칙(CLAUDE.md "AI 냄새 금지") 위반이다.
-// 사용자가 이 화면에서 실제로 확인할 정보를 넣어라 — 아래처럼 데이터가 사는 행으로.
-const HIGHLIGHTS = [
-  { title: '오늘', description: '아직 기록이 없어요' },
-  { title: '이번 주', description: '기록 3건 · 평균 12분' },
-];
+function weightLabel(weight: 1 | 2 | 3): string {
+  if (weight === 1) return "가벼움";
+  if (weight === 2) return "보통";
+  return "힘듦";
+}
+
+function addDaysKST(dateStr: string, delta: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+}
+
+function safeHaptic() {
+  try {
+    Promise.resolve(generateHapticFeedback({ type: "tickWeak" })).catch(() => {});
+  } catch {
+    /* 앱인토스 WebView 밖 — 무시 */
+  }
+}
 
 export default function Home() {
   const navigate = useNavigate();
+  const { ready, state, toggleCheckIn } = useAppState();
+
+  const today = todayKST();
+  const yesterday = addDaysKST(today, -1);
+
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastText, setToastText] = useState("");
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_STEP);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (ready && !state.household) {
+      navigate("/onboarding", { replace: true });
+    }
+  }, [ready, state.household, navigate]);
+
+  const activeChores = useMemo(() => state.chores.filter((c) => c.active), [state.chores]);
+  const members = state.members;
+  const me = members.find((m) => m.isMe) ?? members[0];
+
+  const selectedDateCheckIns = useMemo(
+    () => state.checkIns.filter((c) => c.date === selectedDate),
+    [state.checkIns, selectedDate],
+  );
+  const todayCount = selectedDateCheckIns.length;
+  const checkedSet = useMemo(
+    () => new Set(selectedDateCheckIns.map((c) => `${c.choreId}__${c.memberId}`)),
+    [selectedDateCheckIns],
+  );
+
+  function isChecked(choreId: ChoreId, memberId: MemberId): boolean {
+    const pairKey = `${choreId}__${memberId}`;
+    const override = overrides[`${selectedDate}__${pairKey}`];
+    if (override !== undefined) return override;
+    return checkedSet.has(pairKey);
+  }
+
+  function handleToggle(choreId: ChoreId, memberId: MemberId) {
+    const key = `${selectedDate}__${choreId}__${memberId}`;
+    const prev = isChecked(choreId, memberId);
+    const next = !prev;
+
+    setOverrides((o) => ({ ...o, [key]: next }));
+    safeHaptic();
+
+    const result = toggleCheckIn(selectedDate, choreId, memberId);
+    if (!result.ok) {
+      setOverrides((o) => ({ ...o, [key]: prev }));
+      setToastText(result.error ?? "저장에 실패했어요");
+      setToastOpen(true);
+      return;
+    }
+    setToastText(next ? "체크인 완료!" : "체크인을 취소했어요");
+    setToastOpen(true);
+  }
+
+  function switchDate(date: string) {
+    if (date === selectedDate) return;
+    safeHaptic();
+    setSelectedDate(date);
+  }
+
+  function scrollToList() {
+    try {
+      listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch {
+      /* jsdom 등 미지원 환경 — 무시 */
+    }
+  }
+
+  const myTodayCount = me ? countTodayCheckIns(state, me.id, today) : 0;
+  const showReminder = ready && shouldShowReminder(state.settings, new Date(), myTodayCount);
+
+  if (!ready) {
+    return (
+      <ScreenScaffold
+        top={<Top title={<Top.TitleParagraph>{state.household?.name ?? "choresplit"}</Top.TitleParagraph>} />}
+      >
+        <LoadingState rows={4} testId="app-loading" />
+      </ScreenScaffold>
+    );
+  }
+
+  const visibleChores = activeChores.slice(0, visibleCount);
 
   return (
     <ScreenScaffold
-      top={<Top title={<Top.TitleParagraph>choresplit</Top.TitleParagraph>} />}
+      top={
+        <Top
+          title={<Top.TitleParagraph>{state.household?.name ?? "choresplit"}</Top.TitleParagraph>}
+          right={
+            <Button variant="weak" size="small" onClick={() => navigate("/members")}>
+              동거인
+            </Button>
+          }
+        />
+      }
+      bottom={<FloatingTabBar items={TAB_ITEMS} />}
     >
-      {/* 시각 앵커: 헤드라인 + 카드 내 진입 버튼(부유 금지, display="block" 전체폭).
-          데이터 앱이면 value를 <Amount typography="t1" />(핵심 숫자)로 교체하라. */}
       <SummaryHero
-        label="choresplit"
-        value={<Paragraph.Text typography="t2">동거인과 집안일 기여도를 매일 기록해 공정하게 정산해주는 가사분담 트래커</Paragraph.Text>}
-        caption="로그인 없이 바로 쓸 수 있어요"
-        action={
-          // 라벨은 앱의 핵심 행동 동사로 교체하라 — "연봉 계산하기"/"기록 남기기" 등.
-          // generic "시작하기"/"확인"은 카피 규칙 위반. onClick도 실제 첫 화면 경로로.
-          <Button variant="fill" display="block" onClick={() => navigate('/')}>
-            첫 결과 보기
-          </Button>
-        }
-        testId="home-hero"
+        testId="today-hero"
+        label="오늘 체크인"
+        value={<CountUp value={todayCount} unit="건" typography="t1" />}
+        caption={`활성 항목 ${activeChores.length}개`}
       />
 
-      <Spacing size={24} />
+      {activeChores.length > 0 && todayCount === 0 && (
+        <>
+          <Spacing size={16} />
+          <div
+            data-testid="today-empty"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              padding: "24px 0",
+            }}
+          >
+            <Asset.ContentIcon name="iconHomeRegular" alt="오늘 첫 집안일" />
+            <Spacing size={12} />
+            <Paragraph.Text typography="t6">오늘 첫 집안일을 기록해보세요</Paragraph.Text>
+          </div>
+        </>
+      )}
 
-      {/* 핵심 정보는 Card로 묶기(raw div 금지) — 위계 생성 */}
-      <Card testId="home-highlights">
-        {HIGHLIGHTS.map((h, idx) => (
-          <ListRow
-            key={idx}
-            contents={<ListRow.Texts type="2RowTypeA" top={h.title} bottom={h.description} />}
+      {showReminder && (
+        <>
+          <Spacing size={16} />
+          <Card testId="reminder-banner">
+            <Paragraph.Text typography="st11">오늘 집안일 기록을 잊지 않으셨나요?</Paragraph.Text>
+            <Spacing size={12} />
+            <Button variant="weak" size="medium" display="block" onClick={scrollToList}>
+              지금 기록하기
+            </Button>
+          </Card>
+        </>
+      )}
+
+      <Spacing size={16} />
+
+      <div ref={listRef}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Chip
+            selected={selectedDate === yesterday}
+            variant={selectedDate === yesterday ? "fill" : "weak"}
+            onClick={() => switchDate(yesterday)}
+          >
+            어제
+          </Chip>
+          <Chip
+            selected={selectedDate === today}
+            variant={selectedDate === today ? "fill" : "weak"}
+            onClick={() => switchDate(today)}
+          >
+            오늘
+          </Chip>
+        </div>
+
+        <Spacing size={16} />
+
+        {activeChores.length === 0 ? (
+          <EmptyState
+            title="집안일 항목을 먼저 추가해주세요"
+            description="설거지, 청소 같은 항목을 등록하면 체크인할 수 있어요"
+            action={
+              <Button
+                variant="weak"
+                onClick={() => navigate("/chores", { state: { openCreate: true } })}
+              >
+                항목 관리
+              </Button>
+            }
           />
-        ))}
-      </Card>
+        ) : (
+          <>
+            {visibleChores.map((c) => (
+              <ListRow
+                key={c.id}
+                contents={
+                  <ListRow.Texts
+                    type="2RowTypeA"
+                    top={c.name}
+                    bottom={`${weightLabel(c.weight)} · ${c.frequency === "daily" ? "매일" : "주 1회"}`}
+                  />
+                }
+                right={
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {members.map((m) => (
+                      <Chip
+                        key={m.id}
+                        selected={isChecked(c.id, m.id)}
+                        variant={isChecked(c.id, m.id) ? "fill" : "weak"}
+                        onClick={() => handleToggle(c.id, m.id)}
+                      >
+                        {m.name}
+                      </Chip>
+                    ))}
+                  </div>
+                }
+              />
+            ))}
+            {activeChores.length > visibleCount && (
+              <>
+                <Spacing size={12} />
+                <Button
+                  variant="weak"
+                  display="block"
+                  onClick={() => setVisibleCount((v) => v + VISIBLE_STEP)}
+                >
+                  더 보기
+                </Button>
+              </>
+            )}
+          </>
+        )}
+      </div>
 
       <Spacing size={24} />
+      <AdSlot adGroupId={import.meta.env.VITE_TOSS_AD_GROUP_ID ?? "home-bottom"} />
+      <Spacing size={80} />
+
+      <Toast open={toastOpen} text={toastText} position="bottom" onClose={() => setToastOpen(false)} />
     </ScreenScaffold>
   );
 }
