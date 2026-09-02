@@ -234,6 +234,7 @@ export const MAX_TASKS = 30 as cons
   lib/
     contract.ts
     storage.ts
+    store.tsx
     types.ts
     utils.ts
   main.tsx
@@ -281,82 +282,4 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 - 0005: fine.ts — 미이행 집계 & 정산 제안 (files: src/domain/fine.ts)
 - 0006: streak.ts + ranking.ts — 스트릭 / 주간 랭킹 (files: src/domain/streak.ts, src/domain/ranking.ts)
 - 0007: repository.ts + sharecode.ts — CRUD/시딩 & 공유 코드 (files: src/storage/repository.ts, src/storage/sharecode.ts)
-
-## Available exports from existing files
-// src/App.tsx
-export default function App() {
-
-// src/components/AdSlot.tsx
-export function AdSlot({ adGroupId, className, variant, theme }: AdSlotProps) {
-
-// src/components/Amount.tsx
-export function Amount({
-
-// src/components/BottomCTA.tsx
-export function SubmitFooter({
-export function ButtonStack({
-
-// src/components/Card.tsx
-export function Card({
-
-// src/components/CountUp.tsx
-export function CountUp({
-
-// src/components/FloatingTabBar.tsx
-export type TabItem = {
-export function FloatingTabBar({ items }: { items: TabItem[] }) {
-
-// src/components/MiniBar.tsx
-export function MiniBar({
-
-// src/components/PageShell.tsx
-export function PageShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-
-// src/components/ScreenScaffold.tsx
-export function ScreenScaffold({
-
-// src/components/Sparkline.tsx
-export function Sparkline({
-
-// src/components/StateView.tsx
-export function EmptyState({
-export function LoadingState({
-
-// src/components/SummaryHero.tsx
-export function SummaryHero({
-
-// src/components/TossPurchase.tsx
-export interface TossPurchaseResult {
-export function TossPurchase({
-
-// src/components/TossRewardAd.tsx
-export function TossRewardAd({
-
-// src/domain/date.ts
-export function toDateKey(date: Date): string {
-export function todayKST(timestamp?: number): string {
-export function weekdayOf(dateKey: string): string {
-export function weekKeyOf(dateKey: string): string {
-export function weekRange(weekKey: string): { start: string; end: string; days: string[] } {
-export function shiftWeek(weekKey: string, delta: number): string {
-export function daysBetween(a: string, b: string): number {
-export function isFutureDate(dateKey: string): boolean {
-export function shouldShowReminder(
-export function formatDateLabel(dateKey: string): string {
-
-// src/domain/fairness.ts
-export function calcFairness(
-export function gradeOf(score: number): "완벽" | "양호" | "주의" | "불균형" {
-export function weeklyWeightsByMember(
-export function weightByTask(logs: Chor
-
-## Memory Index (자동 학습 — 힌트로만 사용, 실제 코드 확인 필수)
-
-Available topics: deploy(1), general(10), testing(1), ui(1)
-
-Key lessons (verify against actual code before applying):
-- [general] 저장·데이터 접근 등 기반 계층 패킷은 이를 import 하는 화면 패킷보다 반드시 먼저 완료·병합하고, 미완료면 상위 화면 패킷 병합을 차단하라 — 빈 기반 모듈 하나가 전 라우트 스모크를 무너뜨린다. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 외부에서 들어온 모든 값(라우터 state, 로컬 저장소, 부분 입력 폼)은 사용 직전에 배열·객체 기본값으로 정규화하고, 테이블/맵 조회 결과는 존재 확인 후에만 하위 속성이나 length에 접근하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 의존 그래프 최하층의 타입·계약 파일은 런타임 코드 0줄의 순수 선언으로 가장 먼저 단독 타입체크를 통과시키고, 파일 생성은 셸 명령이 아닌 허용된 편집 도구로만 하게 강제하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 영속 저장소에서 읽은 값은 항상 스키마 기본값으로 정규화해 배열·객체 타입을 보장한 뒤 반환하고, 화면은 빈/손상/부분 데이터에서도 렌더되도록 방어하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 정책·기능 제거형 리팩터링은 화면과 도메인 로직 레이어에서만 수행하고, package.json의 플랫폼 필수 의존성(디자인 시스템·플랫폼 SDK·프레임워크 코어)은 어떤 경우에도 삭제하지 말 것 — 필수 패키지 화이트리스트를 빌드 전 가드로 검증하라. (60% · 타 앱 1회 — 맹신 금지)
+- 0008: AppStore — 전역 상태 / 부팅 / 저장 실패 알림 (files: src/lib/store.tsx)
