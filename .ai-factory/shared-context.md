@@ -13,65 +13,56 @@
  * 타입을 그대로 가정해도 된다. 추측이 어긋나 병합에서 무너지는 것을 막기 위한 파일이다.
  */
 
-/** 집안일 항목 (모든 패킷이 참조) (구현: 패킷 0001) */
-export type Task = { id: string; assignee: string; description: string; frequency: 'daily'|'weekly'; category?: string; createdAt: number; archivedAt?: number };
+/** 과제 기본 도메인 엔티티 — 모든 패킷에서 참조 (구현: 패킷 0001) */
+export type Task = { id: string; name: string; assigneeId: string; frequencyDays: number; description?: string; createdAt: string; updatedAt: string };
 
-/** 구성원 (0007, 0008에서 CRUD) (구현: 패킷 0001) */
-export type Member = { id: string; name: string; joinedAt: number; shareCode?: string; targetRatio?: number };
+/** 가구원 도메인 엔티티 (구현: 패킷 0001) */
+export type Member = { id: string; name: string; householdId: string; joinedAt: string };
 
-/** 체크인 기록 (도메인 계산에 필요) (구현: 패킷 0001) */
-export type CheckinLog = { id: string; taskId: string; memberId: string; date: string; completedAt: number };
+/** 가구 도메인 엔티티 (구현: 패킷 0001) */
+export type Household = { id: string; name: string; createdAt: string; memberIds: string[] };
 
-/** 라우터 상태 (0021에서 사용, 0022에서 검증) (구현: 패킷 0001) */
-export type RouteState = { type: string; params?: Record<string, any>; title?: string };
+/** 라우트 간 상태 전달 용 제네릭 dict (구현: 패킷 0001) */
+export type RouteState = { [key: string]: string | number | boolean | null };
 
-/** 스토어에서 값 읽기 (0007, 0008에서 사용) (구현: 패킷 0002) */
-export type safeGetFn = <T>(key: string, fallback: T) => T;
+/** 로컬 스토리지 안전 읽기 — 스키마 검증 포함 (구현: 패킷 0002) */
+export type safeGetFn = <T = any>(key: string) => Promise<T | null>;
 
-/** 스토어에 값 저장 (0007, 0008에서 사용) (구현: 패킷 0002) */
-export type safeSetFn = (key: string, value: any) => Promise<void>;
+/** 로컬 스토리지 안전 쓰기 (구현: 패킷 0002) */
+export type safeSetFn = <T = any>(key: string, value: T) => Promise<void>;
 
-/** 오래된 로그 삭제 (0008에서 부팅 시 호출) (구현: 패킷 0002) */
-export type pruneLogsFn = (beforeDays: number) => Promise<number>;
+/** 만료된 로그 삭제 — 반환값은 삭제된 레코드 수 (구현: 패킷 0002) */
+export type pruneLogsFn = (olderThanDays: number) => Promise<number>;
 
-/** 현재 또는 주어진 시간의 KST 날짜 (구현: 패킷 0003) */
-export type getKSTDateFn = (timestamp?: number) => Date;
+/** KST 기준 주 경계(월~일) 계산 (구현: 패킷 0003) */
+export type getWeekBoundaryFn = (date?: Date) => { start: Date; end: Date };
 
-/** 해당 주의 시작일 (월요일) (구현: 패킷 0003) */
-export type getWeekStartFn = (date: Date) => Date;
+/** KST 타임존 포맷팅 — 기본값 'YYYY-MM-DD' (구현: 패킷 0003) */
+export type formatDateKSTFn = (date: Date, format?: string) => string;
 
-/** 해당 주의 종료일 (일요일) (구현: 패킷 0003) */
-export type getWeekEndFn = (date: Date) => Date;
+/** 구성원 공정성 점수(0~100) — 순수 함수 (구현: 패킷 0004) */
+export type calculateFairnessFn = (tasks: Task[], memberId: string, weekStartDate: Date) => number;
 
-/** 날짜 문자열 포맷팅 (UI에서 표시용) (구현: 패킷 0003) */
-export type formatDateFn = (date: Date, format: 'YYYY-MM-DD'|'M월 D일') => string;
+/** 미이행 집계 — 리스트 반환 (구현: 패킷 0005) */
+export type aggregateFinesFn = (period: { start: Date; end: Date }) => Array<{ memberId: string; amountKrw: number; reason: string }>;
 
-/** 공정성 점수 계산 (0006, 0015, 0016, 0018에서 사용) (구현: 패킷 0004) */
-export type calculateFairnessScoreFn = (memberId: string, checkins: CheckinLog[], tasks: Task[]) => number;
+/** 정산 제안 — 이체 순서 (구현: 패킷 0005) */
+export type proposeLedgerFn = (fines: Array<{ memberId: string; amountKrw: number }>) => Array<{ from: string; to: string; amountKrw: number }>;
 
-/** 미이행으로 인한 벌금 계산 (0017에서 사용) (구현: 패킷 0005) */
-export type calculateFinesOwedFn = (memberId: string, checkins: CheckinLog[], tasks: Task[], finePerMiss: number) => number;
+/** 연속 체크인 일수 — 오늘 기준 (구현: 패킷 0006) */
+export type calculateStreakFn = (memberId: string, endDate?: Date) => number;
 
-/** 정산 제안 생성 (0017에서 사용) (구현: 패킷 0005) */
-export type generateSettlementFn = (members: Member[], checkins: CheckinLog[], tasks: Task[]) => { from: string; to: string; amount: number }[];
+/** 주간 랭킹 정렬 리스트 — 점수 내림차순 (구현: 패킷 0006) */
+export type calculateWeeklyRankingFn = (weekStartDate: Date, householdId: string) => Array<{ rank: number; memberId: string; score: number }>;
 
-/** 연속 완료 일수 (0018에서 표시) (구현: 패킷 0006) */
-export type calculateStreakFn = (memberId: string, checkins: CheckinLog[], date?: Date) => number;
+/** 전역 앱 상태 훅 — 모든 페이지에서 필수 (구현: 패킷 0008) */
+export type useAppStateFn = () => { household: Household | null; members: Member[]; tasks: Task[]; checkins: Array<{ taskId: string; memberId: string; date: string }> };
 
-/** 주간 랭킹 계산 (0015, 0018에서 사용) (구현: 패킷 0006) */
-export type getWeeklyRankingsFn = (members: Member[], checkins: CheckinLog[], tasks: Task[]) => { memberId: string; rank: number; score: number }[];
+/** 저장 실패 알림 용 훅 (구현: 패킷 0008) */
+export type useSaveErrorFn = () => { error: Error | null; clear: () => void };
 
-/** 새 항목 생성 (0008에서 액션 제공) (구현: 패킷 0007) */
-export type createTaskFn = (task: Omit<Task, 'id'|'createdAt'>) => Promise<Task>;
-
-/** 항목 수정 (0008에서 액션 제공) (구현: 패킷 0007) */
-export type updateTaskFn = (id: string, updates: Partial<Task>) => Promise<void>;
-
-/** 항목 삭제 (0008에서 액션 제공) (구현: 패킷 0007) */
-export type deleteTaskFn = (id: string) => Promise<void>;
-
-/** 초대 공유코드 생성 (0019에서 사용) (구현: 패킷 0007) */
-export type generateShareCodeFn = (groupId: string) => string;
+/** 라우트 간 전달 상태 접근 — useSearchParams 기반 (구현: 패킷 0022) */
+export type useRouteStateFn = <T = RouteState>(name: string) => T | null;
 
 ```
 
@@ -245,6 +236,7 @@ export const MAX_TASKS = 30 as cons
   pages/
     Home.tsx
     Onboarding.tsx
+    Report.tsx
     __TdsGallery.tsx
   storage/
     repository.ts
@@ -285,6 +277,7 @@ export const MAX_TASKS = 30 as cons
 ### Module Dependencies (import graph)
   pages/Home.tsx → imports: lib/store, components/ScreenScaffold, components/SummaryHero, components/Card, components/Amount, components/Sparkline, components/StateView, domain/date, domain/streak
   pages/Onboarding.tsx → imports: components/ScreenScaffold, components/BottomCTA, components/Card, storage/repository, lib/types
+  pages/Report.tsx → imports: lib/store, components/ScreenScaffold, components/SummaryHero, components/Card, components/CountUp, components/MiniBar, components/StateView, components/FloatingTabBar, domain/date, domain/fairness, lib/types, lib/types
 CRITICAL: Before creating any new function, type, or component, check the list above. If something similar exists, import and use it.
 
 ## Already Implemented (do NOT duplicate or overwrite)
@@ -302,88 +295,19 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 - 0016: 리포트 상세 + 리워드 광고 게이트 (files: src/components/ReportDetail.tsx)
 - 0010: 온보딩 화면 /onboarding (files: src/pages/Onboarding.tsx)
 - 0011: 홈 상단부 — 리마인더 배너 · 구성원 탭 · 히어로 (files: src/pages/Home.tsx)
-
-## Available exports from existing files
-// src/App.tsx
-export default function App() {
-
-// src/components/AdSlot.tsx
-export function AdSlot({ adGroupId, className, variant, theme }: AdSlotProps) {
-
-// src/components/Amount.tsx
-export function Amount({
-
-// src/components/BottomCTA.tsx
-export function SubmitFooter({
-export function ButtonStack({
-
-// src/components/Card.tsx
-export function Card({
-
-// src/components/CheckinList.tsx
-export function CheckinList() {
-
-// src/components/CountUp.tsx
-export function CountUp({
-
-// src/components/FloatingTabBar.tsx
-export type TabItem = {
-export function FloatingTabBar({ items }: { items: TabItem[] }) {
-
-// src/components/MiniBar.tsx
-export function MiniBar({
-
-// src/components/PageShell.tsx
-export function PageShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-
-// src/components/Presentation.tsx
-export function SummaryHero({
-export function Sparkline({
-export function MiniBar({
-export function EmptyState({
-
-// src/components/ReportDetail.tsx
-export function ReportDetail({ weekKey, contributions, dailyTrend }: ReportDetailProps) {
-
-// src/components/ScreenScaffold.tsx
-export function ScreenScaffold({
-
-// src/components/Sparkline.tsx
-export function Sparkline({
-
-// src/components/StateView.tsx
-export function EmptyState({
-export function LoadingState({
-
-// src/components/SummaryHero.tsx
-export function SummaryHero({
-
-// src/components/TaskEditSheet.tsx
-export function TaskEditSheet({
-
-// src/components/TossPurchase.tsx
-export interface TossPurchaseResult {
-export function TossPurchase({
-
-// src/components/TossRewardAd.tsx
-export function TossRewardAd({
-
-// src/domain/date.ts
-export function toDateKey(date: Date): string {
-export function todayKST(timestamp?: number): string {
-export function weekdayOf(dateKey: string): string {
-export function weekKeyOf(dateKey: string): string {
-export function weekRange(weekKey: string): { start: string; end: string; days: string[] } {
-export function shiftWeek(weekKey: string, delta: number): string {
-expor
-
-## Memory Index (자동 학습 — 힌트로만 사용, 실제 코드 확인 필수)
-
-Available topics: deploy(1), general(10), testing(1), ui(1)
-
-Key lessons (verify against actual code before applying):
-- [general] 저장·데이터 접근 등 기반 계층 패킷은 이를 import 하는 화면 패킷보다 반드시 먼저 완료·병합하고, 미완료면 상위 화면 패킷 병합을 차단하라 — 빈 기반 모듈 하나가 전 라우트 스모크를 무너뜨린다. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 외부에서 들어온 모든 값(라우터 state, 로컬 저장소, 부분 입력 폼)은 사용 직전에 배열·객체 기본값으로 정규화하고, 테이블/맵 조회 결과는 존재 확인 후에만 하위 속성이나 length에 접근하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 의존 그래프 최하층의 타입·계약 파일은 런타임 코드 0줄의 순수 선언으로 가장 먼저 단독 타입체크를 통과시키고, 파일 생성은 셸 명령이 아닌 허용된 편집 도구로만 하게 강제하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 영속 저장소에서 읽은 값은 항상 스키마 기본값으로 정규화해 배열·객체 타입을 보장한 뒤 반환하고, 화면은 빈/손상/부분 데이터에서도 렌더되도록 방어하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 정책·기능 제거형 리팩터링은 화면과 도메인 로직 레이어에서만 수행하고, package.json의 플랫폼 필수 의존성(디자인 시스템·플랫폼 SDK·프레임워크 코어)은 어떤 경우에도 삭제하지 말 것 — 필수 패키지 화이트리스트를 빌드 전 가드로 검증하라. (60% · 타 앱 1회 — 맹신 금지)
+- 0015: 주간 리포트 요약 /report (히어로 · 주 이동 · 빈 상태) (files: src/pages/Report.tsx)
+- 0001: 도메인 타입 + RouteState 정의 (files: src/lib/types.ts)
+- 0002: storage.ts — safeGet/safeSet/pruneLogs/스키마 (files: src/storage/storage.ts)
+- 0003: date.ts — KST 날짜/주 경계 유틸 (files: src/domain/date.ts)
+- 0004: fairness.ts — 공정성 점수 순수 함수 (files: src/domain/fairness.ts)
+- 0005: fine.ts — 미이행 집계 & 정산 제안 (files: src/domain/fine.ts)
+- 0006: streak.ts + ranking.ts — 스트릭 / 주간 랭킹 (files: src/domain/streak.ts, src/domain/ranking.ts)
+- 0007: repository.ts + sharecode.ts — CRUD/시딩 & 공유 코드 (files: src/storage/repository.ts, src/storage/sharecode.ts)
+- 0008: AppStore — 전역 상태 / 부팅 / 저장 실패 알림 (files: src/lib/store.tsx)
+- 0009: 공용 표현 컴포넌트 (SummaryHero / Sparkline / MiniBar / EmptyState) (files: src/components/Presentation.tsx)
+- 0010: 온보딩 화면 /onboarding (files: src/pages/Onboarding.tsx)
+- 0011: 홈 상단부 — 리마인더 배너 · 구성원 탭 · 히어로 (files: src/pages/Home.tsx)
+- 0012: 홈 체크인 리스트 + 빈 상태 + 배너 광고 (files: src/components/CheckinList.tsx)
+- 0014: 항목 추가/편집 BottomSheet + 검증 (files: src/components/TaskEditSheet.tsx)
+- 0015: 주간 리포트 요약 /report (히어로 · 주 이동 · 빈 상태) (files: src/pages/Report.tsx)
+- 0016: 리포트 상세 + 리워드 광고 게이트 (files: src/components/ReportDetail.tsx)
