@@ -27,7 +27,7 @@ import type {
   Settings,
   SettlementRecord,
 } from "./types";
-import { DEFAULT_STATE, loadState, loadUnlocked, saveState, unlockWeek } from "./storage";
+import { DEFAULT_STATE, loadState, loadUnlocked, pruneOlderThan, saveState, unlockWeek } from "./storage";
 import {
   addChore as addChoreImpl,
   addMember as addMemberImpl,
@@ -58,6 +58,7 @@ export interface AppStateValue {
   toggleCheckIn: (date: string, choreId: ChoreId, memberId: MemberId) => ActionResult;
   updateSettings: (patch: Partial<Settings>) => ActionResult;
   addSettlement: (record: SettlementRecord) => ActionResult;
+  pruneCheckIns: (days: number) => ActionResult;
   unlock: (weekStart: string) => void;
 }
 
@@ -183,6 +184,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [mutate],
   );
 
+  const pruneCheckInsAction = useCallback(
+    (days: number): ActionResult =>
+      mutate((draft) => {
+        draft.checkIns = pruneOlderThan(draft, days).checkIns;
+        return { ok: true };
+      }),
+    [mutate],
+  );
+
   const unlockAction = useCallback((weekStart: string) => {
     unlockWeek(weekStart);
     setUnlocked((prev) => ({ ...prev, [weekStart]: true }));
@@ -202,6 +212,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     toggleCheckIn: toggleCheckInAction,
     updateSettings: updateSettingsAction,
     addSettlement: addSettlementAction,
+    pruneCheckIns: pruneCheckInsAction,
     unlock: unlockAction,
   };
 

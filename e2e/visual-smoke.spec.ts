@@ -18,8 +18,7 @@ const ROUTES: { path: string; name: string }[] = [
   { path: "/report/detail", name: "report-detail" },
   { path: "/settle", name: "settle" },
   { path: "/streak", name: "streak" },
-  // { path: "/result", name: "result" },   // ← 이 앱의 라우트를 추가
-  // { path: "/settings", name: "settings" },
+  { path: "/settings", name: "settings" },
 ];
 
 /** /members는 household가 없으면 /onboarding으로 리다이렉트하므로 가구+동거인을 시드한다. */
@@ -39,7 +38,7 @@ const MEMBERS_SEED_STATE = {
 /** 데이터가 필요한 화면용 localStorage 시드(앱에 맞게 채워라). 앱 스크립트보다 먼저 실행된다. */
 async function seed(page: Page): Promise<void> {
   await page.addInitScript((state) => {
-    if (window.location.pathname === "/members") {
+    if (window.location.pathname === "/members" || window.location.pathname === "/settings") {
       window.localStorage.setItem("choresplit:v1", JSON.stringify(state));
     }
   }, MEMBERS_SEED_STATE);

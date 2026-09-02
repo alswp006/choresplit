@@ -171,11 +171,15 @@ export function formatDateKST(dateStr: string): string {
 
 /**
  * Remove checkIns older than N days (input state is not mutated)
+ * Cutoff is computed as calendar days back from today in KST (checkIn.date is a
+ * KST "YYYY-MM-DD" string) — using the real-time UTC instant here would drift by
+ * a day near the KST midnight boundary (00:00~09:00 UTC+9 vs UTC calendar date).
  */
 export function pruneOlderThan(state: ChoreSplitState, days: number): ChoreSplitState {
-  const now = new Date();
-  const cutoffDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-  const cutoffDateStr = cutoffDate.toISOString().split("T")[0];
+  const [y, m, d] = todayKST().split("-").map(Number);
+  const cutoff = new Date(Date.UTC(y, m - 1, d));
+  cutoff.setUTCDate(cutoff.getUTCDate() - days);
+  const cutoffDateStr = cutoff.toISOString().split("T")[0];
 
   const filtered = state.checkIns.filter((checkIn) => checkIn.date >= cutoffDateStr);
 

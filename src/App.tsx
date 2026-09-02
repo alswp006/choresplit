@@ -8,6 +8,7 @@ import Report from './pages/Report';
 import ReportDetail from './pages/ReportDetail';
 import Settle from './pages/Settle';
 import Streak from './pages/Streak';
+import Settings from './pages/Settings';
 import { AppStateProvider } from './lib/store';
 
 // Dev-only TDS Gallery route — `import.meta.env.DEV` is statically replaced
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/report/detail" element={<ReportDetail />} />
         <Route path="/settle" element={<Settle />} />
         <Route path="/streak" element={<Streak />} />
+        <Route path="/settings" element={<Settings />} />
         {DevTdsGallery && (
           <Route
             path="/__tds-gallery"
