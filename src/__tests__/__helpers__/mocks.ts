@@ -313,6 +313,16 @@ export function mockTossRewardAd() {
 
 // ── react-router-dom ──
 // Preserve actual router + override useNavigate for assertion.
+// NOTE: useLocation is intentionally left as the real hook (delegates via `...actual`), NOT
+// stubbed to the static `mockLocation` constant below. A previous version overrode it, but since
+// vi.mock() bodies are hoisted to the top of THIS file merely by importing anything from this
+// module (even without calling mockRouter()), that static override silently won for any
+// cross-file consumer of useLocation (e.g. a page component importing react-router-dom
+// separately) whose own test file registered a different "react-router-dom" mock — the page
+// component would always see a fixed {pathname:"/",search:"",state:null,key:"default"} instead
+// of the real MemoryRouter location/state, even though renderWithRouter always wraps in a real
+// MemoryRouter. No test asserts on the static mockLocation object (grep confirmed), so real
+// useLocation is a safe, strictly more correct default.
 export function mockRouter() {
   vi.mock("react-router-dom", async () => {
     const actual = await vi.importActual<typeof import("react-router-dom")>(
@@ -321,7 +331,6 @@ export function mockRouter() {
     return {
       ...actual,
       useNavigate: () => mockNavigate,
-      useLocation: () => mockLocation,
     };
   });
 }

@@ -244,6 +244,7 @@ export const MAX_TASKS = 30 as cons
   main.tsx
   pages/
     Home.tsx
+    Onboarding.tsx
     __TdsGallery.tsx
   storage/
     repository.ts
@@ -280,6 +281,10 @@ export const MAX_TASKS = 30 as cons
 - TaskEditSheet.tsx: TaskEditSheet
 - TossPurchase.tsx: TossPurchase
 - TossRewardAd.tsx: TossRewardAd
+
+### Module Dependencies (import graph)
+  pages/Home.tsx → imports: lib/store, components/ScreenScaffold, components/SummaryHero, components/Card, components/Amount, components/Sparkline, components/StateView, domain/date, domain/streak
+  pages/Onboarding.tsx → imports: components/ScreenScaffold, components/BottomCTA, components/Card, storage/repository, lib/types
 CRITICAL: Before creating any new function, type, or component, check the list above. If something similar exists, import and use it.
 
 ## Already Implemented (do NOT duplicate or overwrite)
@@ -295,6 +300,8 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 - 0012: 홈 체크인 리스트 + 빈 상태 + 배너 광고 (files: src/components/CheckinList.tsx)
 - 0014: 항목 추가/편집 BottomSheet + 검증 (files: src/components/TaskEditSheet.tsx)
 - 0016: 리포트 상세 + 리워드 광고 게이트 (files: src/components/ReportDetail.tsx)
+- 0010: 온보딩 화면 /onboarding (files: src/pages/Onboarding.tsx)
+- 0011: 홈 상단부 — 리마인더 배너 · 구성원 탭 · 히어로 (files: src/pages/Home.tsx)
 
 ## Available exports from existing files
 // src/App.tsx
