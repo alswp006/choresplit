@@ -1,0 +1,723 @@
+[
+  {
+    "id": "0001",
+    "title": "도메인 타입 + RouteState 정의",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/lib/types.ts에 SPEC 전체 엔티티 타입(Household, Member, Weekday, Difficulty, ChoreTask, ChoreLog, AppSettings)과 파생 계산 타입(FairnessResult, MemberShare, FineSummary, UnfulfilledItem, RankRow, StreakResult, SnapshotV1), STORAGE_KEYS 7개 키 상수, 상한 상수, RouteState 라우트별 state 계약을 정의한다. 런타임 로직 0줄이며 import 문도 0개다.",
+      "acceptance_criteria": [
+        "npx tsc --noEmit 통과하고 파일 내 import 문이 0개, function 정의가 0개다",
+        "STORAGE_KEYS에 household/tasks/logs/settings/schema/backup/logsCorrupt 7개 키가 'choresplit:...:v1' 문자열과 1:1 일치한다",
+        "RouteState가 '/', '/onboarding', '/tasks', '/report', '/settle', '/ranking', '/invite', '/settings' 8개 키를 가지며 '/report'와 '/settle'은 { weekKey: string } | undefined 이다",
+        "MAX_MEMBERS=4, MAX_TASKS=30, MAX_FINE=10000, LOG_KEEP_DAYS=180, MAX_UNLOCKED_WEEKS=12, MAX_WEEK_BACK=12가 as const로 export 된다"
+      ]
+    },
+    "covers": [
+      "기반 타입 (전 AC 전제)"
+    ],
+    "files": [
+      "src/lib/types.ts"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "모든 타입이 named export"
+    ],
+    "depends_on": [],
+    "db_schema": "interface Household { id: string; name: string; createdAt: number; members: Member[] } / interface ChoreTask { id; name; emoji; difficulty; repeatDays; assigneeId; fineAmount; archived; updatedAt } / interface ChoreLog { id; date; taskId; memberId; weight; createdAt } / interface AppSettings { activeMemberId; reminderEnabled; reminderTime; onboardingDone; lastReportWeekKey; reportUnlockedWeeks } → localStorage keys: choresplit:household:v1, choresplit:tasks:v1, choresplit:logs:v1, choresplit:settings:v1, choresplit:schema:v1",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0002",
+    "title": "storage.ts — safeGet/safeSet/pruneLogs/스키마",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/storage/storage.ts에 localStorage 단일 관문을 구현한다. safeGet<T>은 JSON.parse 실패 시 원본을 <key>.corrupt에 백업 후 fallback 반환하고 복구 플래그를 큐에 기록한다. safeSet<T>은 직렬화 실패 시 reason='serialize', QuotaExceededError 시 로그를 90일로 prune 후 정확히 1회 재시도하고 실패하면 reason='quota'를 반환한다. readSchema()는 version!==1이면 키를 삭제하지 않고 compatible:false를 반환한다.",
+      "acceptance_criteria": [
+        "logs 키에 문자열 '{{{'가 저장된 상태에서 safeGet(LOGS, [])가 []를 반환하고 localStorage['choresplit:logs:v1.corrupt']==='{{{'이며 consumeRecoveryFlags()가 첫 호출에 ['choresplit:logs:v1'], 두 번째 호출에 []를 반환한다",
+        "setItem이 항상 QuotaExceededError를 던지는 목에서 safeSet이 { ok:false, reason:'quota' }를 반환하고 예외를 밖으로 던지지 않으며 setItem 호출은 2회 이하다",
+        "pruneLogs(logs, 180)이 181일 전 로그를 제거하고 180일 전 로그는 유지한다",
+        "readSchema()가 {version:2} 저장 상태에서 { compatible:false }를 반환하고 choresplit:schema:v1 키가 삭제되지 않는다",
+        "파일 전체에 console.error 호출이 0건이다"
+      ]
+    },
+    "covers": [
+      "F1-AC4",
+      "F1-AC5",
+      "F1-AC8"
+    ],
+    "files": [
+      "src/storage/storage.ts"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "모든 쓰기가 safeSet 경유"
+    ],
+    "depends_on": [],
+    "db_schema": "localStorage 키: choresplit:household:v1 / choresplit:tasks:v1 / choresplit:logs:v1 / choresplit:settings:v1 / choresplit:schema:v1, 손상 백업 키 <key>.corrupt",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0003",
+    "title": "date.ts — KST 날짜/주 경계 유틸",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/domain/date.ts에 KST 고정 날짜 유틸을 구현한다. todayKST, toDateKey, weekdayOf, weekKeyOf(월요일 시작 YYYY-Www), weekRange(start/end/days 7개), shiftWeek, daysBetween, isFutureDate, shouldShowReminder, formatDateLabel('09/01(월)')을 제공한다. Array.prototype.at, Object.groupBy, structuredClone, Intl.Segmenter는 사용하지 않는다.",
+      "acceptance_criteria": [
+        "weekKeyOf('2026-09-02')==='2026-W36'이고 weekRange('2026-W36').days[0]==='2026-08-31', days[6]==='2026-09-06'이다",
+        "shiftWeek('2026-W36',-1)==='2026-W35'이고 shiftWeek('2026-W01',-1)이 예외 없이 전년도 마지막 주 문자열을 반환한다",
+        "shouldShowReminder('21:30','21:00',0,true)===true, ('20:00','21:00',0,true)===false, ('21:30','21:00',1,true)===false, ('21:30','21:00',0,false)===false",
+        "isFutureDate(내일 dateKey)===true, isFutureDate(오늘)===false",
+        "grep -n '\\.at(\\|Object.groupBy\\|structuredClone' src/domain/date.ts 결과가 0건이다"
+      ]
+    },
+    "covers": [
+      "F8-AC1",
+      "F8-AC2"
+    ],
+    "files": [
+      "src/domain/date.ts"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "순수 함수만 존재 (localStorage 접근 0건)"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0004",
+    "title": "fairness.ts — 공정성 점수 순수 함수",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/domain/fairness.ts에 calcFairness(weights, targets)를 구현한다. share_i=weight_i/total, fairness=max(0, round(100 - Σ|share_i-target_i|*100)), total===0이면 fairness 0 + isEmpty:true를 반환한다. 부수 함수로 gradeOf(90↑완벽/70~89양호/40~69주의/미만 불균형), weeklyWeightsByMember, weightByTask, dailyWeights(길이 7 고정)를 포함한다. localStorage 접근 없이 순수 함수만 둔다.",
+      "acceptance_criteria": [
+        "calcFairness([{memberId:'a',weight:6},{memberId:'b',weight:4}], {a:0.5,b:0.5})가 { fairness:80, shares:{a:0.6,b:0.4} }를 반환한다",
+        "weight가 모두 0이면 { fairness:0, shares:{a:0,b:0}, isEmpty:true }를 반환한다",
+        "gradeOf(90)==='완벽', gradeOf(89)==='양호', gradeOf(40)==='주의', gradeOf(39)==='불균형'",
+        "dailyWeights(로그 0건, weekKey)가 [0,0,0,0,0,0,0]을 반환하고 항상 길이 7이다",
+        "파일 내 localStorage 접근이 0건이다"
+      ]
+    },
+    "covers": [
+      "F1-AC7",
+      "F5-AC3"
+    ],
+    "files": [
+      "src/domain/fairness.ts"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "date.ts 유틸만 import"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0005",
+    "title": "fine.ts — 미이행 집계 & 정산 제안",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/domain/fine.ts에 calcUnfulfilled(tasks, logs, members, weekKey)를 구현한다. 주의 각 날짜에 대해 repeatDays 포함 + assigneeId 일치 + 해당 로그 없음인 건을 수집하되 assigneeId===null, archived===true, 미래 날짜는 제외한다. calcFines는 구성원별 합계를, calcSettlement은 2인이면 transfer/none, 3인 이상이면 listOnly를 반환한다.",
+      "acceptance_criteria": [
+        "repeatDays [1,3,5]·assignee mb_민지·fine 1000인 항목에서 월·수만 체크인된 주는 calcUnfulfilled 길이 1, calcFines가 [{memberId:'mb_민지', amount:1000, count:1}]이다",
+        "assigneeId===null이고 fineAmount 2000인 미이행 항목은 결과 배열에 포함되지 않고 반환값의 hasUnassignedFineTask===true다",
+        "민지 3000/현우 0이면 { type:'transfer', from:'mb_민지', to:'mb_현우', amount:3000 }, 민지 2000/현우 2000이면 { type:'none' }을 반환한다",
+        "구성원이 3명이면 calcSettlement이 { type:'listOnly' }를 반환한다",
+        "archived:true 항목과 미래 날짜는 미이행 집계에서 제외된다"
+      ]
+    },
+    "covers": [
+      "F6-AC1",
+      "F6-AC3",
+      "F6-AC5",
+      "F6-AC7"
+    ],
+    "files": [
+      "src/domain/fine.ts"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "순수 함수 (localStorage 접근 0건)"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0006",
+    "title": "streak.ts + ranking.ts — 스트릭 / 주간 랭킹",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/domain/streak.ts에 calcStreak(logs, memberId, todayKey)를 구현한다. 오늘 또는 어제부터 역순 연속 일수를 세고 마지막 로그가 이틀 이상 전이면 0, badge는 null/'7일 연속 달성 🔥'/'30일 연속 🏆'이다. src/domain/ranking.ts의 calcRanking은 weight 내림차순 → 로그 건수 내림차순 → createdAt 오름차순 정렬에 ratio와 isTop을 부여한다. 두 함수 모두 미래 날짜 로그를 입력에서 제외한다.",
+      "acceptance_criteria": [
+        "로그가 08-31, 09-01, 09-02이고 오늘이 2026-09-02면 streak===3이다",
+        "마지막 로그가 08-30이고 오늘이 09-02면 streak===0, 마지막 로그가 어제 09-01이고 오늘 로그 0건이면 streak>=1로 유지된다",
+        "민지 weight 4·로그 2건, 현우 weight 4·로그 4건이면 calcRanking()[0].memberId==='mb_현우', [0].isTop===true, [1].isTop===false",
+        "민지 6/현우 4면 ratio가 각각 1과 0.67(소수 2자리 반올림)이다",
+        "미래 날짜 로그를 1건 섞어도 두 함수 모두 예외 없이 동일한 결과를 반환한다"
+      ]
+    },
+    "covers": [
+      "F7-AC1",
+      "F7-AC2",
+      "F7-AC3",
+      "F7-AC4",
+      "F7-AC7"
+    ],
+    "files": [
+      "src/domain/streak.ts",
+      "src/domain/ranking.ts"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "순수 함수 (localStorage 접근 0건)"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0007",
+    "title": "repository.ts + sharecode.ts — CRUD/시딩 & 공유 코드",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/storage/repository.ts에 storage.ts만 경유하는 CRUD(loadAll, createHousehold, seedDefaultTasks 6종, upsertTask, archiveTask, toggleLog 멱등, saveSettings, pruneOldLogs, resetAll)를 구현한다. src/storage/sharecode.ts에는 스냅샷 base64 인코딩/디코딩과 로그 id 기준 중복 제거 병합, 병합 직전 백업 저장을 구현한다.",
+      "acceptance_criteria": [
+        "createHousehold('우리집',[민지,현우]) 후 저장된 Household의 members.length===2이고 각 targetShare===0.5, id가 'hh_'/'mb_' + 8자리 base36 형식이다",
+        "seedDefaultTasks() 실행 후 choresplit:tasks:v1에 설거지·청소·빨래·분리수거·요리·화장실청소 6개가 difficulty 2, repeatDays [], assigneeId null, fineAmount 0으로 저장된다",
+        "toggleLog을 같은 (date,taskId,memberId)로 2회 호출하면 로그가 0건이 되고, 3회 호출하면 1건이며 id가 lg_${date}_${taskId}_${memberId} 형식으로 중복 생성되지 않는다",
+        "encodeSnapshot()의 출력이 decodeSnapshot()으로 원본과 동일한 객체를 복원하고, 잘못된 문자열 입력 시 예외 대신 { ok:false } 를 반환한다",
+        "mergeSnapshot 실행 시 병합 전 상태가 choresplit backup 키에 저장되고, 동일 id 로그는 중복 추가되지 않는다"
+      ]
+    },
+    "covers": [
+      "F1-AC1",
+      "F4-AC1",
+      "F4-AC2"
+    ],
+    "files": [
+      "src/storage/repository.ts",
+      "src/storage/sharecode.ts"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "직접 localStorage 호출 0건 (storage.ts 경유)"
+    ],
+    "depends_on": [
+      "0002"
+    ],
+    "db_schema": "Household/ChoreTask[]/ChoreLog[]/AppSettings → choresplit:*:v1 키. 스냅샷 SnapshotV1 { version:1, household, tasks, logs } → base64 문자열, 최대 4000자",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0008",
+    "title": "AppStore — 전역 상태 / 부팅 / 저장 실패 알림",
+    "epic": "Epic 1 데이터",
+    "task": {
+      "description": "src/lib/store.tsx에 React Context 기반 AppStore를 구현한다. 부팅 시 repository.loadAll()로 household/tasks/logs/settings/schemaCompatible/recoveredKeys를 읽어 booting 상태를 노출하고, 모든 변경 액션(체크인 토글, 항목 저장, 설정 저장)이 실패하면 globalToast 메시지를 상태로 노출한다. 파생값(스트릭·랭킹)은 저장하지 않고 도메인 함수로 계산해 반환한다.",
+      "acceptance_criteria": [
+        "useAppStore()가 booting, household, tasks, logs, settings, schemaCompatible, toast 필드를 반환하고 초기 렌더에서 booting===true → loadAll 완료 후 false로 전환된다",
+        "저장 실패(reason:'quota') 시 toast가 '저장 공간이 부족해요. 설정에서 오래된 기록을 정리해주세요'로 설정되고 이전 상태가 롤백된다",
+        "손상 복구 플래그가 있으면 부팅 후 '일부 기록을 읽지 못했어요' 토스트가 정확히 1회만 노출된다",
+        "AppStoreProvider 밖에서 useAppStore() 호출 시 명확한 에러 메시지를 던진다"
+      ]
+    },
+    "covers": [
+      "F1-AC4",
+      "F1-AC5",
+      "F1-AC6"
+    ],
+    "files": [
+      "src/lib/store.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "파생값 미저장 (계산만)"
+    ],
+    "depends_on": [
+      "0007"
+    ],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": ""
+  },
+  {
+    "id": "0009",
+    "title": "공용 표현 컴포넌트 (SummaryHero / Sparkline / MiniBar / EmptyState)",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/components/Presentation.tsx에 화면 공용 표현 컴포넌트를 구현한다. SummaryHero(label/value/caption), Sparkline(7일 포인트 막대/선), MiniBar(ratio 0~1 가로 막대), EmptyState(Asset.ContentIcon + 문구 + CTA 버튼)를 제공한다. 색상은 var(--tds-color-*)만 사용하고 여백은 TDS Spacing으로만 조절한다.",
+      "acceptance_criteria": [
+        "SummaryHero가 label/value/caption을 Paragraph.Text와 children으로 렌더하고 data-testid를 prop으로 전달받아 그대로 DOM에 노출한다",
+        "Sparkline이 길이 7 숫자 배열을 받아 7개 막대를 렌더하고, 전부 0이면 최소 높이 막대를 표시하며 예외가 없다",
+        "MiniBar가 ratio 0일 때 폭 0%, 1일 때 100%로 렌더하고 1 초과 입력은 100%로 클램프한다",
+        "EmptyState가 Asset.ContentIcon + 설명 텍스트 + <Button variant=\"weak\" display=\"block\"> CTA를 렌더한다",
+        "파일 내 HEX 색상 문자열(#RRGGBB)이 0건이고 Tailwind padding/margin 클래스가 0건이다"
+      ]
+    },
+    "covers": [
+      "F3-AC(홈 표현)",
+      "F5-AC3"
+    ],
+    "files": [
+      "src/components/Presentation.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "TDS 컴포넌트 + CSS flex만 사용"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "TDS 화이트리스트: Paragraph.Text, Spacing, Button, Asset.ContentIcon, Badge. SummaryHero: 세로 flex 중앙 정렬 — 상단 label(typography=\"st11\", color=\"secondary\"), 중앙 value(children, t1 크기 슬롯), 하단 caption(Badge 슬롯). Sparkline: 가로 flex, 7개 막대 균등 폭(flex:1), gap은 CSS flex gap 허용, 막대 배경 var(--tds-color-primary), 최대값 기준 상대 높이(최소 4px). MiniBar: 배경 var(--tds-color-grey200) 트랙 + var(--tds-color-primary) 채움, 높이 8px, border-radius 4px. EmptyState: 중앙 정렬 — Asset.ContentIcon(size 48) + Spacing 12 + 안내 문구(Paragraph.Text) + Spacing 16 + Button(variant=\"weak\", display=\"block\"). 모든 색은 var(--tds-color-*)."
+  },
+  {
+    "id": "0010",
+    "title": "온보딩 화면 /onboarding",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Onboarding.tsx에 최초 실행 화면을 구현한다. 가구 이름 TextField와 구성원 행(이모지 Chip + 이름 TextField + 삭제 버튼)을 최대 4행까지 편집하고, 검증 통과 시 createHousehold + seedDefaultTasks + settings 저장 후 navigate('/', { replace:true })한다. 이름 공백/중복은 TextField hasError와 help로 표시한다.",
+      "acceptance_criteria": [
+        "가구 '우리집' + 구성원 2명 입력 후 '시작하기' 탭 시 household의 members.length===2, 각 targetShare===0.5로 저장되고 기본 항목 6개가 시딩되며 settings.onboardingDone===true, activeMemberId가 첫 구성원 id가 된다",
+        "저장 성공 후 navigate('/', { replace:true })가 호출되어 뒤로가기로 온보딩에 돌아오지 않는다",
+        "구성원 이름이 동일하면 '이름이 중복돼요', 빈 값이면 '이름을 입력해주세요'가 해당 TextField help에 표시되고 저장이 수행되지 않는다",
+        "구성원 4명일 때 '구성원 추가' 버튼이 disabled 되고 안내 문구 '구성원은 최대 4명까지 등록할 수 있어요'가 표시된다",
+        "저장 중에는 시작하기 버튼이 loading 상태로 중복 탭이 차단된다"
+      ]
+    },
+    "covers": [
+      "F1-AC1",
+      "F1-AC3"
+    ],
+    "files": [
+      "src/pages/Onboarding.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 색상 0건",
+      "터치 타겟 44px 이상"
+    ],
+    "depends_on": [],
+    "db_schema": "Household { id:'hh_'+base36(8), name, createdAt, members: Member[] } → choresplit:household:v1 / ChoreTask[] → choresplit:tasks:v1 / AppSettings → choresplit:settings:v1",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: FixedBottomCTA. TDS whitelist: Top, Paragraph, TextField, Chip, Button, Spacing, ListRow, Toast, Card, SubmitFooter.\nLayout:\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>우리집 만들기</Top.TitleParagraph>} />\n  <Spacing size={16} />\n  <Card><TextField variant=\"box\" label=\"가구 이름\" value={name} onChange={...} help=\"1~20자로 입력해주세요\" hasError={nameError} enterKeyHint=\"next\" /></Card>\n  <Spacing size={24} />\n  <Paragraph.Text typography=\"t4\">함께 사는 사람</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>{members.map(m => (<ListRow left={<Chip label={m.emoji} variant=\"filled\" selected onClick={openEmoji} />} contents={<TextField variant=\"line\" value={m.name} onChange={...} hasError={!!m.error} help={m.error} />} right={<Button variant=\"weak\" size=\"small\" color=\"light\">삭제</Button>} />))}</Card>\n  <Spacing size={12} />\n  <Button variant=\"weak\" size=\"medium\" display=\"block\" disabled={members.length >= 4}>구성원 추가</Button>\n  <Spacing size={32} />\n  <SubmitFooter><Button variant=\"fill\" size=\"large\" display=\"block\" loading={saving}>시작하기</Button></SubmitFooter>\n  <Toast open={toastOpen} position=\"bottom\" onClose={...} />\n</ScreenScaffold>\nStates — Loading: 저장 중 <Button loading> 중복 탭 차단, 필드 disabled. Empty: 해당 없음(구성원 2행 기본). Error: TextField hasError + help에 '이름을 입력해주세요' / '이름이 중복돼요' / '가구 이름을 입력해주세요'.\nInteractions: 이모지 Chip 탭 → 이모지 선택 BottomSheet(44×44px, haptic tickWeak). '구성원 추가' 탭 → 행 추가(최대 4, haptic tickWeak), 4명 도달 시 disabled + 안내. '삭제' 탭 → 행 제거(최소 1행 유지, haptic tickStrong). '시작하기' 탭 → 검증 통과 시 haptic success → 저장 → navigate('/', { replace:true }). TextField 포커스 시 scrollIntoView({ block:'center' }), SubmitFooter는 키보드 위 유지. 하단 고정 요소 paddingBottom: calc(16px + env(safe-area-inset-bottom))."
+  },
+  {
+    "id": "0011",
+    "title": "홈 상단부 — 리마인더 배너 · 구성원 탭 · 히어로",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Home.tsx의 상단 영역을 구현한다. Top(초대 버튼) → 리마인더/스키마 안내 배너 → 구성원 Tab 세그먼트 → SummaryHero(오늘 기여 점수 + 스트릭 Badge) → Sparkline(최근 7일)을 배치한다. 부팅 중에는 data-testid=\"boot-skeleton\" Skeleton 뷰를 노출한다. 체크인 리스트는 다음 패킷에서 채운다.",
+      "acceptance_criteria": [
+        "booting===true인 동안 data-testid=\"boot-skeleton\"이 렌더되고 로드 완료 후 실제 콘텐츠로 교체된다",
+        "reminderEnabled이고 현재 시각이 reminderTime 이후이며 오늘 로그가 0건이면 data-testid=\"reminder-banner\"가 표시되고, 오늘 로그가 1건 이상이면 표시되지 않는다",
+        "구성원 Tab을 탭하면 선택 구성원이 바뀌고 SummaryHero의 오늘 기여 점수가 해당 구성원 기준 값으로 갱신된다",
+        "히어로 탭 시 navigate('/report', { state: { weekKey } })가 호출된다",
+        "schemaCompatible===false이면 '기록 형식이 달라 일부 기능이 제한돼요' 안내 배너가 표시된다"
+      ]
+    },
+    "covers": [
+      "F1-AC6",
+      "F1-AC8",
+      "F7-AC1",
+      "F8-AC1"
+    ],
+    "files": [
+      "src/pages/Home.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "Spacing으로만 여백 조절"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: StatusPanel. TDS whitelist: Top, Tab, Card, ListRow, Chip, Badge, Button, Paragraph, Spacing, Toast, Skeleton, Asset.ContentIcon (커스텀: SummaryHero, Sparkline, AdSlot).\nLayout(상단부):\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>오늘의 체크인</Top.TitleParagraph>} right={<Button variant=\"weak\" size=\"small\" onClick={() => navigate('/invite')}>초대</Button>} />\n  {showReminder && (<Card data-testid=\"reminder-banner\"><ListRow contents={<ListRow.Texts type=\"2RowTypeA\" top=\"오늘 아직 체크인하지 않았어요\" bottom=\"집안일 하나만 기록해볼까요?\" />} /></Card>)}\n  <Spacing size={16} />\n  <Tab onChange={setMemberIdx}>{members.map((m,i) => <Tab.Item key={m.id} selected={i===memberIdx}>{m.emoji} {m.name}</Tab.Item>)}</Tab>\n  <Spacing size={16} />\n  <SummaryHero data-testid=\"today-summary-hero\" label={`${dateLabel} 기여 점수`} value={<Amount value={todayWeight} unit=\"점\" typography=\"t1\" countUp />} caption={<Badge>{streak}일 연속 기록 중</Badge>} />\n  <Spacing size={16} />\n  <Sparkline data-testid=\"week-sparkline\" points={last7Days} />\n  <Spacing size={24} />\n</ScreenScaffold>\nStates — Loading: data-testid=\"boot-skeleton\" (Skeleton 히어로 블록 1개 + ListRow형 Skeleton 5개). Error: Toast '일부 기록을 읽지 못했어요'(부팅 1회).\nInteractions: 히어로 탭 → navigate('/report', { state: { weekKey } }). 구성원 Tab 전환 시 haptic tickWeak. 색상은 var(--tds-color-*)만."
+  },
+  {
+    "id": "0012",
+    "title": "홈 체크인 리스트 + 빈 상태 + 배너 광고",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/components/CheckinList.tsx에 홈 하단 체크인 영역을 구현한다. 미보관 항목을 Card + ListRow로 나열하고 행 전체 탭으로 로그를 멱등 토글한다. 완료 시 haptic success와 Toast, 취소 시 tickWeak과 Toast를 노출하고, 항목이 0개면 EmptyState를 보여준다. 리스트 하단에 AdSlot 배너를 배치한다.",
+      "acceptance_criteria": [
+        "항목 행(높이 56px 이상) 전체를 탭하면 로그가 생성되고 우측 Chip이 '체크'→'완료'(selected)로 바뀌며 Toast '{항목명} 완료!'가 뜬다",
+        "같은 행을 다시 탭하면 로그가 삭제되고 Toast '기록을 취소했어요'가 뜨며 새로고침 후에도 상태가 유지된다",
+        "archived===true인 항목은 리스트에 렌더되지 않는다",
+        "등록된 미보관 항목이 0개면 data-testid=\"home-empty\" EmptyState가 표시되고 CTA 탭 시 navigate('/tasks')된다",
+        "오늘 항목을 모두 완료하면 '오늘 할 일 다 했어요 🎉' 문구가 표시되고, 리스트 하단에 AdSlot 배너가 콘텐츠 위를 덮지 않고 렌더된다"
+      ]
+    },
+    "covers": [
+      "F3-AC1",
+      "F3-AC2",
+      "F3-AC4"
+    ],
+    "files": [
+      "src/components/CheckinList.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "광고가 콘텐츠 위에 겹치지 않음"
+    ],
+    "depends_on": [],
+    "db_schema": "ChoreLog { id: `lg_${date}_${taskId}_${memberId}`, date, taskId, memberId, weight, createdAt } → choresplit:logs:v1",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "TDS whitelist: Card, ListRow, ListRow.Texts, Chip, Paragraph.Text, Spacing, Toast, Button, Asset.ContentIcon (커스텀: EmptyState, AdSlot).\nLayout:\n<Paragraph.Text typography=\"t4\">할 일</Paragraph.Text>\n<Spacing size={12} />\n<Card>{tasks.map(t => (<ListRow key={t.id} data-testid={`chore-check-row-${t.id}`} onClick={() => toggle(t)} left={<Chip label={t.emoji} variant=\"filled\" />} contents={<ListRow.Texts type=\"2RowTypeA\" top={t.name} bottom={difficultyLabel(t)} />} right={<Chip label={checked(t) ? '완료' : '체크'} variant={checked(t) ? 'filled' : 'outlined'} selected={checked(t)} />} />))}</Card>\n{allDone && (<><Spacing size={12} /><Paragraph.Text typography=\"st11\" color=\"secondary\">오늘 할 일 다 했어요 🎉</Paragraph.Text></>)}\n<Spacing size={16} />\n<AdSlot adGroupId={import.meta.env.VITE_TOSS_AD_GROUP_ID} />\n<Spacing size={16} />\n<Toast open={toastOpen} position=\"bottom\" onClose={...} />\nStates — Empty: data-testid=\"home-empty\" EmptyState(Asset.ContentIcon + '집안일을 먼저 등록해주세요' + <Button variant=\"weak\" display=\"block\">항목 등록하기</Button> → navigate('/tasks')). Error: Toast '저장 공간이 부족해요. 설정에서 오래된 기록을 정리해주세요' + 체크 상태 이전 값 롤백.\nInteractions: 행 전체 탭(≥56px) → 로그 멱등 토글, 생성 시 haptic success, 취소 시 tickWeak."
+  },
+  {
+    "id": "0013",
+    "title": "집안일 목록 화면 /tasks",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Tasks.tsx에 항목 목록 화면을 구현한다. 미보관 항목을 Card + ListRow로 나열하고 난이도·반복 요일·담당자·벌금을 요약 표시하며, 행 탭으로 편집 시트를 열고 스와이프 대신 우측 버튼으로 보관 처리한다. 항목이 30개면 추가 버튼을 비활성화하고 안내를 노출한다. 항목 0개면 EmptyState를 보여준다.",
+      "acceptance_criteria": [
+        "미보관 항목이 Card + ListRow로 나열되고 각 행에 이모지, 이름, '보통 · 월수금 · 민지 · 1,000원' 형태의 요약 문구가 표시된다",
+        "보관 버튼 탭 시 AlertDialog(왼쪽 버튼 '닫기')로 확인 후 archived=true로 저장되고 목록에서 즉시 사라진다",
+        "미보관 항목이 30개면 '항목 추가' 버튼이 disabled 되고 '항목은 최대 30개까지 등록할 수 있어요' 안내가 표시된다",
+        "미보관 항목이 0개면 EmptyState(아이콘 + 안내 + '항목 추가하기' 버튼)가 표시된다",
+        "location.state.openCreate===true로 진입하면 추가 시트가 자동으로 열린다"
+      ]
+    },
+    "covers": [
+      "F2-AC1",
+      "F2-AC4",
+      "F2-AC5"
+    ],
+    "files": [
+      "src/pages/Tasks.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "터치 타겟 44px 이상"
+    ],
+    "depends_on": [],
+    "db_schema": "ChoreTask { id:'tk_'+base36(8), name, emoji, difficulty, repeatDays, assigneeId, fineAmount, archived, updatedAt } → choresplit:tasks:v1 (최대 30개)",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: ListManagement. TDS whitelist: Top, Card, ListRow, ListRow.Texts, Chip, Button, Paragraph, Spacing, AlertDialog, Toast, Skeleton, Asset.ContentIcon (커스텀: EmptyState).\nLayout:\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>집안일 항목</Top.TitleParagraph>} />\n  <Spacing size={16} />\n  <Card>{tasks.map(t => (<ListRow key={t.id} data-testid={`task-row-${t.id}`} onClick={() => openEdit(t)} left={<Chip label={t.emoji} variant=\"filled\" />} contents={<ListRow.Texts type=\"2RowTypeA\" top={t.name} bottom={summaryLabel(t)} />} right={<Button variant=\"weak\" size=\"small\" color=\"light\" onClick={askArchive}>보관</Button>} />))}</Card>\n  <Spacing size={16} />\n  <Button variant=\"weak\" size=\"medium\" display=\"block\" disabled={tasks.length >= 30}>항목 추가</Button>\n  <Spacing size={24} />\n  <AlertDialog open={archiveOpen} /> {/* 왼쪽 버튼 '닫기', 오른쪽 '보관하기' */}\n  <Toast open={toastOpen} position=\"bottom\" />\n</ScreenScaffold>\nStates — Loading: data-testid=\"boot-skeleton\" ListRow형 Skeleton 5개. Empty: EmptyState(Asset.ContentIcon + '아직 등록한 집안일이 없어요' + <Button variant=\"weak\" display=\"block\">항목 추가하기</Button>). Error: Toast '저장 공간이 부족해요. 설정에서 오래된 기록을 정리해주세요'.\nInteractions: 행 탭 → 편집 BottomSheet, 보관 버튼 탭 → AlertDialog 확인(haptic tickStrong), 추가 버튼 → 생성 시트. 하단 FloatingTabBar 가림 방지 위해 마지막 요소 아래 Spacing size={80}."
+  },
+  {
+    "id": "0014",
+    "title": "항목 추가/편집 BottomSheet + 검증",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/components/TaskEditSheet.tsx에 항목 생성/편집 BottomSheet를 구현한다. 이름(1~16자), 이모지, 난이도 Chip 3종, 반복 요일 7개 토글 Chip, 담당자 선택(공동 포함), 벌금액(0~10000, 100원 단위)을 입력받고 검증 후 upsertTask로 저장한다. 검증 실패는 TextField hasError + help로 표시한다.",
+      "acceptance_criteria": [
+        "이름이 빈 값이면 '이름을 입력해주세요', 17자 이상이면 '16자까지 입력할 수 있어요'가 help에 표시되고 저장되지 않는다",
+        "벌금액에 150 입력 시 '벌금은 100원 단위로 입력해주세요', 10001 입력 시 '벌금은 10,000원까지 입력할 수 있어요'가 표시되고 저장되지 않는다",
+        "난이도 Chip은 항상 1개만 selected 되고, 요일 Chip은 복수 선택되며 선택 결과가 repeatDays 배열 순서(0~6 오름차순)로 저장된다",
+        "담당자에서 '공동'을 선택하면 assigneeId가 null로 저장된다",
+        "저장 성공 시 시트가 닫히고 목록에 즉시 반영되며 haptic success가 호출된다"
+      ]
+    },
+    "covers": [
+      "F2-AC2",
+      "F2-AC3",
+      "F2-AC6"
+    ],
+    "files": [
+      "src/components/TaskEditSheet.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "터치 타겟 44px 이상"
+    ],
+    "depends_on": [],
+    "db_schema": "ChoreTask { name: 1~16자, emoji, difficulty: 1|2|3, repeatDays: Weekday[], assigneeId: string|null, fineAmount: 0~10000 (100원 단위) } → choresplit:tasks:v1",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "TDS whitelist: BottomSheet, TextField, Chip, Paragraph.Text, Spacing, Button, ListRow, Toast.\nLayout: <BottomSheet open={open} onClose={...}> 내부 — 제목 Paragraph.Text(t4) '집안일 추가' / '집안일 수정' → Spacing 16 → 이모지 Chip(탭 시 이모지 선택) + 이름 TextField(variant=\"box\", label=\"이름\", hasError, help) → Spacing 20 → '난이도' 라벨 + Chip 3개(쉬움/보통/힘듦, 단일 선택 filled+selected) → Spacing 20 → '반복 요일' 라벨 + Chip 7개(일~토, 복수 선택) → Spacing 20 → '담당자' 라벨 + Chip N개(구성원 + '공동') → Spacing 20 → 벌금 TextField(variant=\"box\", label=\"미이행 벌금\", inputMode=\"numeric\", suffix '원', hasError, help) → Spacing 24 → <Button variant=\"fill\" size=\"large\" display=\"block\" loading={saving}>저장하기</Button>.\nStates — Loading: 저장 중 Button loading + 필드 disabled. Error: TextField hasError + help 문구. Empty: 해당 없음.\nInteractions: Chip 탭마다 haptic tickWeak, 저장 성공 시 haptic success + 시트 close. 키보드 열릴 때 저장 버튼이 가려지지 않도록 시트 내부 스크롤, 하단 paddingBottom: calc(16px + env(safe-area-inset-bottom)). 색상은 var(--tds-color-*)만."
+  },
+  {
+    "id": "0015",
+    "title": "주간 리포트 요약 /report (히어로 · 주 이동 · 빈 상태)",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Report.tsx에 주간 공정성 리포트 상단을 구현한다. 쿼리 ?week 또는 location.state.weekKey로 주를 정하고(없으면 이번 주), 좌우 버튼으로 최대 12주 전까지 이동한다. calcFairness 결과를 SummaryHero(점수 + 등급)와 구성원별 MiniBar로 보여주고, 해당 주 로그가 0건이면 EmptyState를 표시한다.",
+      "acceptance_criteria": [
+        "?week=2026-W35로 진입하면 해당 주 데이터가 표시되고, state.weekKey와 쿼리가 모두 없으면 이번 주 weekKey가 사용된다",
+        "이전 주 버튼을 12회 누르면 12주 전에서 버튼이 disabled 되고 그 이상 과거로 이동하지 않으며, 이번 주에서 다음 주 버튼이 disabled 된다",
+        "구성원 weight 6:4 · 목표 5:5인 주에서 히어로에 '80점'과 등급 '양호'가 표시된다",
+        "해당 주 로그가 0건이면 EmptyState('이 주에는 기록이 없어요')가 표시되고 점수 히어로는 렌더되지 않는다",
+        "주 이동 시 URL 쿼리 ?week=가 갱신되어 새로고침 후에도 같은 주가 유지된다"
+      ]
+    },
+    "covers": [
+      "F5-AC1",
+      "F5-AC2",
+      "F5-AC3"
+    ],
+    "files": [
+      "src/pages/Report.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "boot-skeleton 지원"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: StatusPanel. TDS whitelist: Top, Card, ListRow, ListRow.Texts, Chip, Button, Paragraph, Spacing, Badge, Skeleton, Asset.ContentIcon (커스텀: SummaryHero, MiniBar, EmptyState).\nLayout:\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>주간 리포트</Top.TitleParagraph>} />\n  <Spacing size={12} />\n  {/* 주 이동 바: CSS flex, 좌우 Button variant=\"weak\" size=\"small\" + 가운데 Paragraph.Text(t5) '8월 31일~9월 6일' */}\n  <Spacing size={16} />\n  <SummaryHero data-testid=\"fairness-hero\" label=\"이번 주 공정성 점수\" value={<Amount value={fairness} unit=\"점\" typography=\"t1\" countUp />} caption={<Badge>{grade}</Badge>} />\n  <Spacing size={20} />\n  <Paragraph.Text typography=\"t4\">구성원별 기여</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>{shares.map(s => (<ListRow key={s.memberId} left={<Chip label={s.emoji} variant=\"filled\" />} contents={<ListRow.Texts type=\"2RowTypeA\" top={s.name} bottom={`${Math.round(s.share*100)}% · 목표 ${Math.round(s.target*100)}%`} />} right={<MiniBar ratio={s.share} />} />))}</Card>\n  <Spacing size={24} />\n</ScreenScaffold>\nStates — Loading: data-testid=\"boot-skeleton\". Empty: EmptyState(Asset.ContentIcon + '이 주에는 기록이 없어요' + <Button variant=\"weak\" display=\"block\">홈에서 체크인하기</Button> → navigate('/')). Error: 없음(로컬 계산).\nInteractions: 주 이동 버튼 haptic tickWeak, URL setSearchParams로 ?week 갱신. 하단 FloatingTabBar 가림 방지 Spacing size={80}. 색상 var(--tds-color-*)만."
+  },
+  {
+    "id": "0016",
+    "title": "리포트 상세 + 리워드 광고 게이트",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/components/ReportDetail.tsx에 리포트 상세 블록을 구현한다. 항목별 기여 비중과 요일별 기여 추이(Sparkline)를 TossRewardAd로 감싸 해제 전에는 잠금 카드와 '광고 보고 확인하기' 버튼을 보여준다. 해제된 weekKey는 settings.reportUnlockedWeeks에 저장해 재방문 시 광고 없이 노출하고 12개를 넘으면 오래된 것부터 제거한다.",
+      "acceptance_criteria": [
+        "해당 weekKey가 reportUnlockedWeeks에 없으면 상세가 가려지고 잠금 카드 + '광고 보고 확인하기' 버튼이 표시된다",
+        "광고 시청 완료 후 상세가 노출되고 settings.reportUnlockedWeeks에 해당 weekKey가 추가되며, 같은 주 재진입 시 광고 없이 바로 상세가 보인다",
+        "reportUnlockedWeeks가 12개를 초과하면 가장 오래된 항목부터 제거되어 길이가 항상 12 이하로 유지된다",
+        "상세에는 항목별 기여 ListRow + MiniBar와 길이 7의 요일별 Sparkline이 렌더되고, 데이터가 0이어도 예외 없이 렌더된다",
+        "TossRewardAd에 slotId={import.meta.env.VITE_TOSS_AD_SLOT_ID}가 전달되고 광고가 상세 콘텐츠 위에 겹치지 않는다"
+      ]
+    },
+    "covers": [
+      "F5-AC4",
+      "F5-AC5"
+    ],
+    "files": [
+      "src/components/ReportDetail.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "리워드 게이트는 최종 결과 화면에만 적용"
+    ],
+    "depends_on": [],
+    "db_schema": "AppSettings.reportUnlockedWeeks: string[] (최대 12개, weekKey 'YYYY-Www') → choresplit:settings:v1",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "TDS whitelist: Card, ListRow, ListRow.Texts, Chip, Button, Paragraph.Text, Spacing, Badge, Asset.ContentIcon (커스텀: MiniBar, Sparkline, TossRewardAd).\nLayout(잠금 상태): <Card data-testid=\"report-locked\"> 중앙 정렬 — Asset.ContentIcon + Spacing 12 + Paragraph.Text('항목별 상세는 광고를 보고 확인할 수 있어요') + Spacing 16 + <Button variant=\"fill\" size=\"large\" display=\"block\">광고 보고 확인하기</Button> </Card>.\nLayout(해제 상태): <TossRewardAd slotId={import.meta.env.VITE_TOSS_AD_SLOT_ID}> 내부 — <Paragraph.Text typography=\"t4\">항목별 기여</Paragraph.Text> + Spacing 12 + <Card>{byTask.map(t => <ListRow left={<Chip label={t.emoji} variant=\"filled\" />} contents={<ListRow.Texts type=\"2RowTypeA\" top={t.name} bottom={`${t.weight}점`} />} right={<MiniBar ratio={t.ratio} />} />)}</Card> + Spacing 20 + <Paragraph.Text typography=\"t4\">요일별 추이</Paragraph.Text> + Spacing 12 + <Sparkline points={dailyWeights} /> + Spacing 24 </TossRewardAd>.\nStates — Locked: 잠금 카드. Unlocked: 상세 전체. Empty: 항목 기여 0건이면 Paragraph.Text('이 주에는 항목 기록이 없어요'). Error: Toast '광고를 불러오지 못했어요. 잠시 후 다시 시도해주세요' + 재시도 Button.\nInteractions: 해제 버튼 haptic success. 색상 var(--tds-color-*)만."
+  },
+  {
+    "id": "0017",
+    "title": "벌금 정산 화면 /settle",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Settle.tsx에 주간 벌금 정산 화면을 구현한다. 쿼리/state의 weekKey로 calcUnfulfilled·calcFines·calcSettlement 결과를 계산해 정산 제안 카드, 구성원별 벌금 요약, 미이행 상세 목록을 보여준다. 담당자 없는 벌금 항목 안내와 실제 송금이 아님을 알리는 문구, 하단 배너 광고를 배치한다.",
+      "acceptance_criteria": [
+        "민지 3000 / 현우 0인 주에서 정산 카드에 '민지님이 현우님에게 3,000원'이 표시되고, 양쪽이 같으면 '정산할 금액이 없어요'가 표시된다",
+        "구성원이 3명 이상이면 정산 금액 대신 구성원별 벌금 목록만 표시된다",
+        "미이행 상세 목록에 날짜·항목명·담당자·금액이 행마다 표시되고 미이행 0건이면 EmptyState('이 주엔 미이행이 없어요')가 표시된다",
+        "담당자가 없는 벌금 항목이 있으면 '담당자가 없는 항목은 정산에서 제외돼요' 안내가 표시된다",
+        "'앱 안에서만 기록하는 금액이에요. 실제 송금은 하지 않아요' 문구가 표시되고 외부 링크·window.open 호출이 0건이며 하단에 AdSlot 배너가 렌더된다"
+      ]
+    },
+    "covers": [
+      "F6-AC1",
+      "F6-AC2",
+      "F6-AC4",
+      "F6-AC6"
+    ],
+    "files": [
+      "src/pages/Settle.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "window.open/외부 링크 0건"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: StatusPanel + ListManagement. TDS whitelist: Top, Card, ListRow, ListRow.Texts, Chip, Badge, Button, Paragraph, Spacing, Skeleton, Asset.ContentIcon (커스텀: SummaryHero, EmptyState, AdSlot).\nLayout:\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>벌금 정산</Top.TitleParagraph>} />\n  <Spacing size={12} />\n  {/* 주 이동 바: flex, 좌우 Button variant=\"weak\" size=\"small\" + 기간 라벨 */}\n  <Spacing size={16} />\n  <SummaryHero data-testid=\"settle-hero\" label=\"이번 주 정산 제안\" value={<Amount value={net} unit=\"원\" typography=\"t1\" />} caption={<Badge>{`${from}님이 ${to}님에게`}</Badge>} />\n  <Spacing size={20} />\n  <Card>{fines.map(f => <ListRow key={f.memberId} left={<Chip label={f.emoji} variant=\"filled\" />} contents={<ListRow.Texts type=\"2RowTypeA\" top={f.name} bottom={`미이행 ${f.count}건`} />} right={<Paragraph.Text typography=\"st9\">{f.amount.toLocaleString()}원</Paragraph.Text>} />)}</Card>\n  <Spacing size={24} />\n  <Paragraph.Text typography=\"t4\">미이행 상세</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>{items.map(it => <ListRow contents={<ListRow.Texts type=\"2RowTypeA\" top={`${it.dateLabel} ${it.taskName}`} bottom={it.memberName} />} right={<Paragraph.Text typography=\"st11\" color=\"secondary\">{it.amount.toLocaleString()}원</Paragraph.Text>} />)}</Card>\n  <Spacing size={12} />\n  <Paragraph.Text typography=\"st11\" color=\"secondary\">앱 안에서만 기록하는 금액이에요. 실제 송금은 하지 않아요</Paragraph.Text>\n  <Spacing size={16} />\n  <AdSlot adGroupId={import.meta.env.VITE_TOSS_AD_GROUP_ID} />\n  <Spacing size={80} />\n</ScreenScaffold>\nStates — Loading: data-testid=\"boot-skeleton\". Empty: EmptyState(Asset.ContentIcon + '이 주엔 미이행이 없어요' + <Button variant=\"weak\" display=\"block\">항목 설정하기</Button> → navigate('/tasks', { state: { openCreate: true } })). Error: 없음.\nInteractions: 주 이동 haptic tickWeak. 색상 var(--tds-color-*)만."
+  },
+  {
+    "id": "0018",
+    "title": "랭킹 & 스트릭 화면 /ranking",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Ranking.tsx에 주간 랭킹과 스트릭 화면을 구현한다. calcRanking 결과를 1위 강조 카드와 순위 ListRow(MiniBar 포함)로 보여주고, 구성원별 스트릭 일수와 배지(7일/30일)를 나열한다. 이번 주 로그가 0건이면 EmptyState를 표시하고 하단에 배너 광고를 배치한다.",
+      "acceptance_criteria": [
+        "랭킹 목록이 weight 내림차순으로 정렬되어 표시되고 1위 행에만 상단 강조 카드와 '1위' Badge가 렌더된다",
+        "각 행의 MiniBar 폭이 ratio(=weight/maxWeight)에 비례하고 weight가 0인 구성원은 폭 0%로 표시된다",
+        "구성원별 스트릭이 '{n}일 연속'으로 표시되고 7일 이상이면 '7일 연속 달성 🔥', 30일 이상이면 '30일 연속 🏆' Badge가 표시된다",
+        "이번 주 로그가 0건이면 EmptyState('이번 주 기록이 아직 없어요' + 홈으로 이동 CTA)가 표시된다",
+        "하단에 AdSlot 배너가 콘텐츠 아래에 렌더되고 FloatingTabBar에 가려지지 않는다"
+      ]
+    },
+    "covers": [
+      "F7-AC2",
+      "F7-AC3",
+      "F7-AC5",
+      "F7-AC6"
+    ],
+    "files": [
+      "src/pages/Ranking.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "boot-skeleton 지원"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: StatusPanel. TDS whitelist: Top, Card, ListRow, ListRow.Texts, Chip, Badge, Button, Paragraph, Spacing, Skeleton, Asset.ContentIcon (커스텀: SummaryHero, MiniBar, EmptyState, AdSlot).\nLayout:\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>랭킹 · 스트릭</Top.TitleParagraph>} />\n  <Spacing size={16} />\n  <SummaryHero data-testid=\"rank-top-hero\" label=\"이번 주 1위\" value={<Paragraph.Text typography=\"t1\">{top.emoji} {top.name}</Paragraph.Text>} caption={<Badge>{top.weight}점</Badge>} />\n  <Spacing size={20} />\n  <Paragraph.Text typography=\"t4\">전체 순위</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>{rows.map((r,i) => <ListRow key={r.memberId} left={<Chip label={`${i+1}`} variant=\"filled\" selected={r.isTop} />} contents={<ListRow.Texts type=\"2RowTypeA\" top={`${r.emoji} ${r.name}`} bottom={`${r.weight}점 · ${r.logCount}건`} />} right={<MiniBar ratio={r.ratio} />} />)}</Card>\n  <Spacing size={24} />\n  <Paragraph.Text typography=\"t4\">연속 기록</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>{streaks.map(s => <ListRow key={s.memberId} left={<Chip label={s.emoji} variant=\"filled\" />} contents={<ListRow.Texts type=\"2RowTypeA\" top={s.name} bottom={`${s.streak}일 연속`} />} right={s.badge ? <Badge>{s.badge}</Badge> : null} />)}</Card>\n  <Spacing size={16} />\n  <AdSlot adGroupId={import.meta.env.VITE_TOSS_AD_GROUP_ID} />\n  <Spacing size={80} />\n</ScreenScaffold>\nStates — Loading: data-testid=\"boot-skeleton\". Empty: EmptyState(Asset.ContentIcon + '이번 주 기록이 아직 없어요' + <Button variant=\"weak\" display=\"block\">홈에서 체크인하기</Button> → navigate('/')). Error: 없음.\nInteractions: 행 탭 시 haptic tickWeak 후 navigate('/report', { state: { weekKey } }). 색상 var(--tds-color-*)만."
+  },
+  {
+    "id": "0019",
+    "title": "초대 & 합치기 화면 /invite",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Invite.tsx에 공유 코드 생성·복사와 코드 붙여넣기 병합 화면을 구현한다. 내 데이터 스냅샷을 코드로 인코딩해 표시하고 클립보드 복사를 제공하며, 상대 코드를 붙여넣어 병합 시 확인 다이얼로그 후 중복 제거 병합과 되돌리기 버튼을 노출한다. 외부 앱 이동이나 설치 유도 문구는 넣지 않는다.",
+      "acceptance_criteria": [
+        "'코드 만들기' 탭 시 4000자 이하 코드가 TextArea형 영역에 표시되고 복사 버튼 탭 시 Toast '코드를 복사했어요'가 뜬다",
+        "잘못된 코드 붙여넣고 '합치기' 탭 시 '코드를 확인해주세요' 에러가 표시되고 기존 데이터가 변경되지 않는다",
+        "정상 코드 병합 시 AlertDialog(왼쪽 '닫기') 확인 후 로그가 id 기준 중복 없이 합쳐지고 Toast '기록을 합쳤어요'가 표시된다",
+        "병합 직후 '되돌리기' 버튼이 노출되고 탭 시 병합 전 상태로 완전히 복원된다",
+        "파일 내 window.open / window.location.href / 앱 설치 유도 문구가 0건이다"
+      ]
+    },
+    "covers": [
+      "F4-AC1",
+      "F4-AC2",
+      "F4-AC3",
+      "F4-AC4"
+    ],
+    "files": [
+      "src/pages/Invite.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "외부 이탈 코드 0건"
+    ],
+    "depends_on": [],
+    "db_schema": "SnapshotV1 { version:1, household, tasks, logs } → base64 코드 문자열(최대 4000자), 병합 전 백업 → choresplit backup 키",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: FormFlow. TDS whitelist: Top, Card, TextField, Button, Paragraph, Spacing, ListRow, AlertDialog, Toast, Badge.\nLayout:\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>초대 · 합치기</Top.TitleParagraph>} />\n  <Spacing size={16} />\n  <Paragraph.Text typography=\"t4\">내 코드 공유하기</Paragraph.Text>\n  <Spacing size={12} />\n  <Card><Paragraph.Text typography=\"st11\" color=\"secondary\">{code || '코드를 만들어 상대에게 전달해주세요'}</Paragraph.Text></Card>\n  <Spacing size={12} />\n  <Button variant=\"weak\" size=\"medium\" display=\"block\" onClick={makeCode}>코드 만들기</Button>\n  <Spacing size={8} />\n  <Button variant=\"weak\" size=\"medium\" display=\"block\" disabled={!code} onClick={copy}>코드 복사하기</Button>\n  <Spacing size={28} />\n  <Paragraph.Text typography=\"t4\">받은 코드 합치기</Paragraph.Text>\n  <Spacing size={12} />\n  <Card><TextField variant=\"box\" label=\"코드 붙여넣기\" value={input} hasError={!!error} help={error ?? '상대에게 받은 코드를 붙여넣어주세요'} /></Card>\n  <Spacing size={12} />\n  <Button variant=\"fill\" size=\"large\" display=\"block\" loading={merging} disabled={!input}>합치기</Button>\n  {merged && (<><Spacing size={12} /><Button variant=\"weak\" size=\"medium\" display=\"block\" onClick={undo}>되돌리기</Button></>)}\n  <Spacing size={80} />\n  <AlertDialog open={confirmOpen} /> {/* 왼쪽 '닫기', 오른쪽 '합치기' */}\n  <Toast open={toastOpen} position=\"bottom\" />\n</ScreenScaffold>\nStates — Loading: 병합 중 Button loading + 입력 disabled. Empty: 코드 미생성 시 안내 문구. Error: TextField hasError + help '코드를 확인해주세요' / Toast '저장 공간이 부족해요. 설정에서 오래된 기록을 정리해주세요'.\nInteractions: 복사 성공 haptic success, 합치기 확인 haptic success, 되돌리기 tickStrong. 외부 링크·설치 유도 금지. 색상 var(--tds-color-*)만."
+  },
+  {
+    "id": "0020",
+    "title": "설정 화면 /settings — 리마인더 · 목표 지분 · 데이터 관리",
+    "epic": "Epic 2 페이지",
+    "task": {
+      "description": "src/pages/Settings.tsx에 설정 화면을 구현한다. 리마인더 Switch와 시간 선택, 구성원별 목표 지분 조절(합계 1.0 검증), 오래된 기록 정리(90일 prune)와 전체 초기화를 제공한다. 파괴적 동작은 AlertDialog(왼쪽 '닫기')로 확인하며 초기화 후 /onboarding으로 replace 이동한다.",
+      "acceptance_criteria": [
+        "리마인더 Switch를 끄면 settings.reminderEnabled=false로 저장되고 새로고침 후에도 꺼진 상태가 유지되며 홈 리마인더 배너가 표시되지 않는다",
+        "목표 지분 합계가 1.0(±0.01)을 벗어나면 '목표 지분 합계는 100%가 되어야 해요' 에러가 표시되고 저장 버튼이 비활성화된다",
+        "'오래된 기록 정리' 탭 → AlertDialog 확인 시 90일 초과 로그가 삭제되고 Toast '오래된 기록을 정리했어요'가 표시된다",
+        "'전체 초기화' 탭 → AlertDialog 확인 시 choresplit: 접두 키가 모두 제거되고 navigate('/onboarding', { replace:true })된다",
+        "모든 AlertDialog의 왼쪽 버튼 텍스트가 '닫기'이고 '취소'라는 문구가 파일 내에 0건이다"
+      ]
+    },
+    "covers": [
+      "F8-AC3",
+      "F8-AC4",
+      "F1-AC4"
+    ],
+    "files": [
+      "src/pages/Settings.tsx"
+    ],
+    "definition_of_done": [
+      "tsc --noEmit 통과",
+      "HEX 0건",
+      "터치 타겟 44px 이상"
+    ],
+    "depends_on": [],
+    "db_schema": "AppSettings { activeMemberId, reminderEnabled, reminderTime 'HH:mm', onboardingDone, lastReportWeekKey, reportUnlockedWeeks } → choresplit:settings:v1 / Member.targetShare 0.1~0.9 합계 1.0 → choresplit:household:v1",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "Pattern: ListManagement. TDS whitelist: Top, Card, ListRow, ListRow.Texts, Switch, Chip, Button, TextField, Paragraph, Spacing, AlertDialog, Toast, Skeleton.\nLayout:\n<ScreenScaffold>\n  <Top title={<Top.TitleParagraph>설정</Top.TitleParagraph>} />\n  <Spacing size={16} />\n  <Paragraph.Text typography=\"t4\">체크인 리마인더</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>\n    <ListRow contents={<ListRow.Texts type=\"2RowTypeA\" top=\"리마인더 받기\" bottom=\"기록이 없으면 앱 안에서 알려드려요\" />} right={<Switch checked={reminderEnabled} onChange={...} />} />\n    <ListRow contents={<ListRow.Texts type=\"2RowTypeA\" top=\"알림 시각\" bottom={reminderTime} />} right={<Chip label=\"변경\" variant=\"outlined\" onClick={openTimeSheet} />} />\n  </Card>\n  <Spacing size={28} />\n  <Paragraph.Text typography=\"t4\">목표 지분</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>{members.map(m => <ListRow key={m.id} left={<Chip label={m.emoji} variant=\"filled\" />} contents={<ListRow.Texts type=\"2RowTypeA\" top={m.name} bottom={`목표 ${Math.round(m.targetShare*100)}%`} />} right={<TextField variant=\"line\" inputMode=\"numeric\" value={pct} hasError={shareError} />} />)}</Card>\n  <Spacing size={8} />\n  {shareError && <Paragraph.Text typography=\"st11\" color=\"secondary\">목표 지분 합계는 100%가 되어야 해요</Paragraph.Text>}\n  <Spacing size={12} />\n  <Button variant=\"fill\" size=\"large\" display=\"block\" disabled={shareError}>목표 지분 저장</Button>\n  <Spacing size={28} />\n  <Paragraph.Text typography=\"t4\">데이터 관리</Paragraph.Text>\n  <Spacing size={12} />\n  <Card>\n    <ListRow onClick={askPrune} contents={<ListRow.Texts type=\"2RowTypeA\" top=\"오래된 기록 정리\" bottom=\"90일이 지난 기록을 지워요\" />} />\n    <ListRow onClick={askReset} contents={<ListRow.Texts type=\"2RowTypeA\" top=\"전체 초기화\" bottom=\"모든 기록이 사라져요\" />} />\n  </Card>\n  <Spacing size={80} />\n  <AlertDialog open={dialogOpen} /> {/* 왼쪽 '닫기', 오른쪽 '정리하기' 또는 '초기화하기' */}\n  <Toast open={toastOpen} position=\"bottom\" />\n</ScreenScaffold>\nStates — Loading: data-testid=\"boot-skeleton\". Empty: 해당 없음. Error: TextField hasError + 안내 문구, Toast '저장 공간이 부족해요. 설정에서 오래된 기록을 정리해주세요'.\nInteractions: Switch 토글 haptic tickWeak, 파괴적 동작 확인 haptic tickStrong. 색상 var(--tds-color-*)만."
+  },
+  {
+    "id": "0021",
+    "title": "라우터 구성 + 온보딩 가드 + FloatingTabBar + Provider 배선",
+    "epic": "4",
+    "task": {
+      "description": "src/App.tsx에서 AppStoreProvider로 앱을 감싸고 BrowserRouter 기반 8개 라우트(/, /onboarding, /tasks, /invite, /report, /settle, /ranking, /settings)를 연결한다. onboardingDone이 false면 모든 경로에서 /onboarding으로 replace 이동시키고 FloatingTabBar를 숨긴다. 온보딩 외 화면에는 홈·리포트·랭킹·설정 4탭 FloatingTabBar를 렌더한다. main.tsx는 수정하지 않는다.",
+      "acceptance_criteria": [
+        "8개 라우트가 모두 연결되어 직접 URL 진입 시 각 화면이 렌더되고, 정의되지 않은 경로는 /로 replace 이동한다",
+        "settings.onboardingDone===false 상태에서 /, /tasks, /report, /ranking, /settle 중 어디로 진입해도 즉시 /onboarding으로 replace 이동하고 FloatingTabBar가 렌더되지 않는다",
+        "온보딩 완료 후 /onboarding으로 직접 진입하면 /로 replace 이동된다",
+        "FloatingTabBar가 홈·리포트·랭킹·설정 4탭으로 렌더되고 현재 경로 탭이 컬러 틴트로 활성 표시된다",
+        "src/main.tsx에 변경이 없고 npm run build가 성공한다"
+      ]
+    },
+    "covers": [
+      "F1-AC2"
+    ],
+    "files": [
+      "src/App.tsx"
+    ],
+    "definition_of_done": [
+      "npm run build 성공",
+      "App.tsx 단독 소유",
+      "main.tsx 미수정"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [
+      "react-router-dom"
+    ],
+    "ui_requirements": "라우팅 셸: <AppStoreProvider><BrowserRouter><Routes>…</Routes>{showTabBar && <FloatingTabBar items={[{label:'홈',path:'/'},{label:'리포트',path:'/report'},{label:'랭킹',path:'/ranking'},{label:'설정',path:'/settings'}]} />}</BrowserRouter></AppStoreProvider>. 가드 컴포넌트가 store.booting 중에는 data-testid=\"boot-skeleton\" Skeleton을 렌더한다. FloatingTabBar는 템플릿 제공 컴포넌트를 그대로 사용(재구현 금지), 활성 탭 컬러 틴트, 하단 paddingBottom: calc(12px + env(safe-area-inset-bottom)). 색상 하드코딩 금지 — var(--tds-color-*)만."
+  },
+  {
+    "id": "0022",
+    "title": "라우트 state 방어 + 검수 규칙 스윕(HEX · 외부 이탈 · 광고 배치)",
+    "epic": "Epic 3 통합",
+    "task": {
+      "description": "src/lib/routeState.ts에 RouteState 기반 안전 접근 훅(useRouteState, useWeekKeyParam)을 만들어 location.state가 undefined거나 형식이 틀려도 기본값으로 폴백하게 한다. 이어서 전 소스에 대해 HEX 색상, console.error, window.open/외부 링크, Tailwind 여백 클래스, 광고 겹침을 점검해 위반을 수정한다. App.tsx와 main.tsx는 수정하지 않는다.",
+      "acceptance_criteria": [
+        "useWeekKeyParam()이 state·쿼리 모두 없을 때 이번 주 weekKey를 반환하고, 'abc' 같은 잘못된 weekKey 입력 시 예외 없이 이번 주로 폴백한다",
+        "/report·/settle에 state 없이 새로고침해도 크래시 없이 렌더되고 URL 쿼리 ?week 값이 우선 적용된다",
+        "grep -rn '#[0-9a-fA-F]\\{3,6\\}' src/ 결과가 0건이고 grep -rn 'console.error' src/ 결과가 0건이다",
+        "grep -rn 'window.open\\|window.location.href' src/ 결과가 0건이며 앱 설치 유도 문구가 없다",
+        "AdSlot/TossRewardAd가 콘텐츠 위에 겹치지 않고 섹션 사이 또는 결과 하단에만 위치하며 npm run build가 성공한다"
+      ]
+    },
+    "covers": [
+      "F5-AC1",
+      "F6-AC2",
+      "검수 규칙"
+    ],
+    "files": [
+      "src/lib/routeState.ts"
+    ],
+    "definition_of_done": [
+      "npm run build 성공",
+      "tsc --noEmit 통과",
+      "App.tsx/main.tsx 미수정"
+    ],
+    "depends_on": [],
+    "db_schema": "",
+    "api_contract": "",
+    "dependencies": [],
+    "ui_requirements": "UI 변경은 위반 수정에 한정한다. 모든 색상은 var(--tds-color-*) 또는 TDS 기본값, 여백은 TDS Spacing(size 필수)만 사용한다. 하단 고정 요소는 paddingBottom: calc(Npx + env(safe-area-inset-bottom))를 유지하고, 광고는 콘텐츠와 겹치지 않도록 섹션 사이/하단에만 배치한다. 문구는 토스 보이스톤(해요체, 능동형) 유지, Dialog 왼쪽 버튼은 '닫기'."
+  }
+]
