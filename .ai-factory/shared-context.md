@@ -11,80 +11,55 @@
  *
  * 기반 패킷은 여기 선언된 모양 그대로 구현하고, 화면 패킷은 여기 적힌 이름·인자·반환
  * 타입을 그대로 가정해도 된다. 추측이 어긋나 병합에서 무너지는 것을 막기 위한 파일이다.
- *
- * 엔티티/파생 타입은 src/lib/types.ts(SPEC Data Models 원본)를 그대로 재노출한다 —
- * 이 파일에서 별도로 재정의하지 않아 두 파일이 어긋날 수 없다.
  */
 
-export type {
-  MemberId,
-  ChoreId,
-  CheckInId,
-  ColorToken,
-  Member,
-  Chore,
-  CheckIn,
-  Household,
-  Settings,
-  SettlementRecord,
-  ChoreSplitState,
-  MemberWeekStat,
-  WeeklyReport,
-  SaveResult,
-  RouteState,
-} from './types';
+/** 가구 엔티티 (구현: 패킷 0001) */
+export type Household = { id: string; name: string; members: string[]; createdAt: string };
 
-import type {
-  ChoreSplitState,
-  Member,
-  MemberWeekStat,
-  SettlementRecord,
-  Settings,
-  SaveResult,
-  WeeklyReport,
-} from './types';
+/** 집안일 엔티티 (구현: 패킷 0001) */
+export type Chore = { id: string; householdId: string; title: string; category: string; dueDate?: string; completed: boolean };
 
-/** localStorage에서 전체 상태 로드 — 키 없음/파싱 실패 시 기본값 반환 (구현: 패킷 0002) */
-export type loadStateFn = () => ChoreSplitState;
+/** 동거인 엔티티 (구현: 패킷 0001) */
+export type Member = { id: string; householdId: string; name: string; joinedAt: string };
 
-/** localStorage에 전체 상태 저장 — 120일 초과 checkIns 정리 후 직렬화 (구현: 패킷 0002) */
-export type saveStateFn = (state: ChoreSplitState) => SaveResult;
+/** 체크인 기록 (구현: 패킷 0001) */
+export type CheckIn = { id: string; memberId: string; choreId: string; date: string; completed: boolean };
 
-/** 새 가구 생성 + 본인 멤버 + 기본 집안일 6종 시드 (Onboarding에서 사용) (구현: 패킷 0003) */
-export type createHouseholdFn = (name: string, myName: string) => ChoreSplitState;
+/** 주간 리포트 (구현: 패킷 0001) */
+export type WeeklyReport = { week: number; startDate: string; endDate: string; stats: Record<string, { completed: number; total: number }> };
+
+/** 정산 항목 (구현: 패킷 0001) */
+export type Settlement = { fromMember: string; toMember: string; amountKrw: number; reason: string };
+
+/** 라우트 상태 열거형 (구현: 패킷 0001) */
+export type RouteState = 'onboarding' | 'home' | 'chores' | 'members' | 'report' | 'streak' | 'settings';
+
+/** 집안일 추가 (구현: 패킷 0003) */
+export type addChoreFn = (householdId: string, input: { title: string; category: string; dueDate?: string }) => { id: string; [key: string]: any };
+
+/** 체크인 기록 (완료 표시) (구현: 패킷 0003) */
+export type checkInFn = (householdId: string, choreId: string, memberId: string, date: string) => void;
+
+/** 동거인 추가 (구현: 패킷 0003) */
+export type addMemberFn = (householdId: string, name: string) => void;
+
+/** 동거인 제거 (구현: 패킷 0003) */
+export type removeMemberFn = (householdId: string, memberId: string) => void;
 
 /** 주간 리포트 계산 (구현: 패킷 0004) */
-export type buildWeeklyReportFn = (state: ChoreSplitState, weekStart: string) => WeeklyReport;
+export type calculateWeeklyReportFn = (householdId: string, startDate: string, endDate: string) => { week: number; stats: Record<string, { completed: number; total: number }> };
 
-/** 벌금 정산 계산 — 누가 누구에게 얼마를 보내야 하는지(SettlementRecord.lines와 동일 모양) (구현: 패킷 0004) */
-export type computeSettlementFn = (
-  report: WeeklyReport,
-  members: Member[]
-) => {
-  totalPenalty: number;
-  burdens: Array<{ memberId: string; amount: number }>;
-  lines: SettlementRecord['lines'];
-};
+/** 정산 제안 계산 (구현: 패킷 0004) */
+export type calculateSettlementFn = (members: string[], checkIns: any[]) => Array<{ fromMember: string; toMember: string; amountKrw: number }>;
 
-/** 멤버 연속 달성 일수 (구현: 패킷 0005) */
-export type getStreakFn = (state: ChoreSplitState, memberId: string, today?: string) => number;
+/** 스트릭 계산 (구현: 패킷 0005) */
+export type calculateStreakFn = (memberId: string, checkIns: any[], startDate: string) => number;
 
-/** 최근 N일 랭킹 — 가중 점수 내림차순 (구현: 패킷 0005) */
-export type getRankingFn = (state: ChoreSplitState, days?: number) => MemberWeekStat[];
+/** 랭킹 계산 (구현: 패킷 0005) */
+export type calculateRankingFn = (members: Record<string, any>, checkIns: any[], period: string) => Array<{ memberId: string; rank: number; score: number }>;
 
-/** 전역 상태 훅 — loading/mutate(낙관적 업데이트+롤백)/unlocked 포함 (구현: 패킷 0006) */
-export type useAppStateFn = () => {
-  state: ChoreSplitState;
-  loading: boolean;
-  mutate: (
-    fn: (s: ChoreSplitState) => { ok: true; state: ChoreSplitState } | { ok: false; error: string }
-  ) => { ok: boolean; error?: string };
-  unlocked: Record<string, true>;
-  unlock: (weekStart: string) => void;
-};
-
-/** Settings 참조용 별칭 (일부 화면 패킷의 setter 시그니처에서 사용) (구현: 패킷 0002) */
-export type SettingsPatch = Partial<Settings>;
+/** 스토어 훅 (구현: 패킷 0006) */
+export type useAppStoreFn = () => { household?: any; addChore: (input: any) => void; checkIn: (choreId: string, date: string) => void; getState: () => any };
 
 ```
 
@@ -312,83 +287,17 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 - 0012: 주간 리포트 상세 /report/detail (S6) (files: src/pages/ReportDetail.tsx)
 - 0013: 벌금 정산 제안 /settle (S7) (files: src/pages/Settle.tsx)
 - 0014: 스트릭·랭킹 /streak (S8) (files: src/pages/Streak.tsx)
-
-## TDD 상태
-⚠️ TDD 테스트 파일 자동 작성에 실패했습니다. 소스 코드를 작성하기 전에 `src/__tests__/packet-XXXX.test.ts` 파일에 AC 기반 테스트를 먼저 작성하세요 (TDD red phase). 테스트 작성 후 구현하세요.
-
-## Available exports from existing files
-// src/components/AdSlot.tsx
-export function AdSlot({ adGroupId, className, variant, theme }: AdSlotProps) {
-
-// src/components/Amount.tsx
-export function Amount({
-
-// src/components/BottomCTA.tsx
-export function SubmitFooter({
-export function ButtonStack({
-
-// src/components/Card.tsx
-export function Card({
-
-// src/components/CountUp.tsx
-export function CountUp({
-
-// src/components/FloatingTabBar.tsx
-export type TabItem = {
-export function FloatingTabBar({ items }: { items: TabItem[] }) {
-
-// src/components/MiniBar.tsx
-export function MiniBar({
-
-// src/components/PageShell.tsx
-export function PageShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-
-// src/components/ScreenScaffold.tsx
-export function ScreenScaffold({
-
-// src/components/Sparkline.tsx
-export function Sparkline({
-
-// src/components/StateView.tsx
-export function EmptyState({
-export function LoadingState({
-
-// src/components/SummaryHero.tsx
-export function SummaryHero({
-
-// src/components/TossPurchase.tsx
-export interface TossPurchaseResult {
-export function TossPurchase({
-
-// src/components/TossRewardAd.tsx
-export function TossRewardAd({
-
-// src/lib/contract.ts
-export type {
-export type loadStateFn = () => ChoreSplitState;
-export type saveStateFn = (state: ChoreSplitState) => SaveResult;
-export type createHouseholdFn = (name: string, myName: string) => ChoreSplitState;
-export type buildWeeklyReportFn = (state: ChoreSplitState, weekStart: string) => WeeklyReport;
-export type computeSettlementFn = (
-export type getStreakFn = (state: ChoreSplitState, memberId: string, today?: string) => number;
-export type getRankingFn = (state: ChoreSplitState, days?: number) => MemberWeekStat[];
-export type useAppStateFn = () => {
-export type SettingsPatch = Partial<Settings>;
-
-// src/lib/household.ts
-export function seedDefaultChores(): Chore[] {
-export function createHousehold(
-export function validateOnboarding(
-export interface AddChoreInput {
-export function addChore(state: ChoreSplitState, 
-
-## Memory Index (자동 학습 — 힌트로만 사용, 실제 코드 확인 필수)
-
-Available topics: deploy(1), general(10), testing(1), ui(1)
-
-Key lessons (verify against actual code before applying):
-- [general] 저장·데이터 접근 등 기반 계층 패킷은 이를 import 하는 화면 패킷보다 반드시 먼저 완료·병합하고, 미완료면 상위 화면 패킷 병합을 차단하라 — 빈 기반 모듈 하나가 전 라우트 스모크를 무너뜨린다. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 외부에서 들어온 모든 값(라우터 state, 로컬 저장소, 부분 입력 폼)은 사용 직전에 배열·객체 기본값으로 정규화하고, 테이블/맵 조회 결과는 존재 확인 후에만 하위 속성이나 length에 접근하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 의존 그래프 최하층의 타입·계약 파일은 런타임 코드 0줄의 순수 선언으로 가장 먼저 단독 타입체크를 통과시키고, 파일 생성은 셸 명령이 아닌 허용된 편집 도구로만 하게 강제하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 영속 저장소에서 읽은 값은 항상 스키마 기본값으로 정규화해 배열·객체 타입을 보장한 뒤 반환하고, 화면은 빈/손상/부분 데이터에서도 렌더되도록 방어하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 정책·기능 제거형 리팩터링은 화면과 도메인 로직 레이어에서만 수행하고, package.json의 플랫폼 필수 의존성(디자인 시스템·플랫폼 SDK·프레임워크 코어)은 어떤 경우에도 삭제하지 말 것 — 필수 패키지 화이트리스트를 빌드 전 가드로 검증하라. (60% · 타 앱 1회 — 맹신 금지)
+- 0001: 타입 정의 (엔티티 + 파생 + RouteState) (files: src/lib/types.ts)
+- 0002: localStorage 저장소 모듈 (storage.ts) (files: src/lib/storage.ts)
+- 0003: 가구 생성·시드 + 엔티티 mutation 헬퍼 (files: src/lib/household.ts)
+- 0004: 주간 리포트 계산 엔진 + 정산 계산 (files: src/lib/report.ts)
+- 0005: 스트릭·랭킹 계산 + 리마인더 판정 (files: src/lib/streak.ts)
+- 0006: 앱 전역 상태 컨테이너 (Context) (files: src/lib/store.tsx)
+- 0007: 온보딩 페이지 /onboarding (S1) (files: src/pages/Onboarding.tsx)
+- 0008: 홈(오늘 체크인) / (S2) (files: src/pages/Home.tsx)
+- 0009: 집안일 항목 관리 /chores (S3) (files: src/pages/Chores.tsx)
+- 0010: 동거인 관리 /members (S4) (files: src/pages/Members.tsx)
+- 0011: 주간 리포트 게이트 /report (S5) (files: src/pages/Report.tsx)
+- 0012: 주간 리포트 상세 /report/detail (S6) (files: src/pages/ReportDetail.tsx)
+- 0013: 벌금 정산 제안 /settle (S7) (files: src/pages/Settle.tsx)
+- 0014: 스트릭·랭킹 /streak (S8) (files: src/pages/Streak.tsx)
