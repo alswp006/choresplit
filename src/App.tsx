@@ -5,6 +5,7 @@ import Onboarding from './pages/Onboarding';
 import Chores from './pages/Chores';
 import Members from './pages/Members';
 import Report from './pages/Report';
+import ReportDetail from './pages/ReportDetail';
 import { AppStateProvider } from './lib/store';
 
 // Dev-only TDS Gallery route — `import.meta.env.DEV` is statically replaced
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/chores" element={<Chores />} />
         <Route path="/members" element={<Members />} />
         <Route path="/report" element={<Report />} />
+        <Route path="/report/detail" element={<ReportDetail />} />
         {DevTdsGallery && (
           <Route
             path="/__tds-gallery"

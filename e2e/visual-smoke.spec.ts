@@ -15,6 +15,7 @@ const ROUTES: { path: string; name: string }[] = [
   { path: "/onboarding", name: "onboarding" },
   { path: "/chores", name: "chores" },
   { path: "/members", name: "members" },
+  { path: "/report/detail", name: "report-detail" },
   // { path: "/result", name: "result" },   // ← 이 앱의 라우트를 추가
   // { path: "/settings", name: "settings" },
 ];
@@ -40,6 +41,67 @@ async function seed(page: Page): Promise<void> {
       window.localStorage.setItem("choresplit:v1", JSON.stringify(state));
     }
   }, MEMBERS_SEED_STATE);
+
+  // /report/detail은 household+members+chores+checkIns가 있어야 빈 상태가 아니라 실제 리포트를
+  // 렌더한다. 또한 이번 주가 "choresplit:report-unlocked"에 잠금 해제돼 있어야 /report로
+  // 리다이렉트되지 않는다. 날짜는 실행 시점(KST) 기준으로 브라우저 안에서 계산한다.
+  await page.addInitScript(() => {
+    if (window.location.pathname !== "/report/detail") return;
+
+    const todayKST = () => {
+      const now = new Date();
+      const kst = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+      const y = kst.getFullYear();
+      const m = String(kst.getMonth() + 1).padStart(2, "0");
+      const d = String(kst.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+    const parseDate = (s: string) => {
+      const [y, m, d] = s.split("-").map(Number);
+      return new Date(Date.UTC(y, m - 1, d));
+    };
+    const formatDate = (dt: Date) => {
+      const y = dt.getUTCFullYear();
+      const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(dt.getUTCDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    };
+    const addDays = (s: string, n: number) => formatDate(new Date(parseDate(s).getTime() + n * 86400000));
+    const getWeekStart = (s: string) => {
+      const d = parseDate(s);
+      const dow = d.getUTCDay();
+      const diff = dow === 0 ? -6 : 1 - dow;
+      return formatDate(new Date(d.getTime() + diff * 86400000));
+    };
+
+    const weekStart = getWeekStart(todayKST());
+    const day1 = addDays(weekStart, 1);
+
+    const state = {
+      version: 1,
+      household: { id: "h_smoke02", name: "우리집", inviteCode: "AB12CD", createdAt: "2026-01-01T00:00:00.000Z" },
+      members: [
+        { id: "m_smoke1", name: "민수", colorToken: "blue", isMe: true, createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "m_smoke2", name: "지민", colorToken: "green", isMe: false, createdAt: "2026-01-02T00:00:00.000Z" },
+      ],
+      chores: [
+        { id: "c_1", name: "설거지", weight: 2, frequency: "daily", penaltyAmount: 300, active: true, createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "c_2", name: "분리수거", weight: 1, frequency: "daily", penaltyAmount: 200, active: true, createdAt: "2026-01-01T00:00:00.000Z" },
+        { id: "c_3", name: "빨래", weight: 3, frequency: "weekly", penaltyAmount: 1000, active: true, createdAt: "2026-01-01T00:00:00.000Z" },
+      ],
+      checkIns: [
+        { id: `${weekStart}__c_1__m_smoke1`, date: weekStart, choreId: "c_1", memberId: "m_smoke1", weightAtLog: 2, createdAt: `${weekStart}T00:00:00.000Z` },
+        { id: `${day1}__c_1__m_smoke1`, date: day1, choreId: "c_1", memberId: "m_smoke1", weightAtLog: 2, createdAt: `${day1}T00:00:00.000Z` },
+        { id: `${day1}__c_2__m_smoke2`, date: day1, choreId: "c_2", memberId: "m_smoke2", weightAtLog: 1, createdAt: `${day1}T00:00:00.000Z` },
+        { id: `${weekStart}__c_3__m_smoke1`, date: weekStart, choreId: "c_3", memberId: "m_smoke1", weightAtLog: 3, createdAt: `${weekStart}T00:00:00.000Z` },
+      ],
+      settings: { reminderEnabled: true, reminderHour: 21, penaltyEnabled: true, lastReminderShownDate: null },
+      settlements: [],
+    };
+
+    window.localStorage.setItem("choresplit:v1", JSON.stringify(state));
+    window.localStorage.setItem("choresplit:report-unlocked", JSON.stringify({ [weekStart]: true }));
+  });
 }
 
 // 토스 WebView 밖(일반 브라우저)에서만 나는 알려진 dev 에러 — 무시(실기기 WebView엔 안 남)
