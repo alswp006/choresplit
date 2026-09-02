@@ -153,7 +153,7 @@ export function resetAll(): void {
 /** 새 항목 생성 (계약: 패킷 0007). */
 export async function createTask(task: Omit<Task, "id" | "createdAt">): Promise<Task> {
   const tasks = safeGet<Task[]>(CONTRACT_TASKS_KEY, []);
-  const created: Task = { ...task, id: makeId("tk"), createdAt: Date.now() };
+  const created: Task = { ...task, id: makeId("tk"), createdAt: new Date().toISOString() };
   safeSet(CONTRACT_TASKS_KEY, [...tasks, created]);
   return created;
 }

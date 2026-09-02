@@ -169,3 +169,23 @@ export function formatDate(date: Date, format: "YYYY-MM-DD" | "M월 D일"): stri
   const d = date.getUTCDate();
   return format === "YYYY-MM-DD" ? `${y}-${pad2(m)}-${pad2(d)}` : `${m}월 ${d}일`;
 }
+
+/** 기준 시각(기본: 지금)이 속한 KST 주의 경계(월요일 00:00 ~ 일요일 23:59:59.999) */
+export function getWeekBoundary(date?: Date): { start: Date; end: Date } {
+  const base = date ?? getKSTDate();
+  return { start: getWeekStart(base), end: getWeekEnd(base) };
+}
+
+/**
+ * Date를 KST 표현으로 포맷(UTC 필드 기준 — getKSTDate와 동일 표현 가정). 기본 포맷은 'YYYY-MM-DD'.
+ * 'YYYY-MM-DD'/'M월 D일'은 formatDate로 위임하고, 그 외 커스텀 포맷 문자열은 토큰(YYYY/MM/DD) 치환으로 처리한다.
+ */
+export function formatDateKST(date: Date, format: string = "YYYY-MM-DD"): string {
+  if (format === "YYYY-MM-DD" || format === "M월 D일") {
+    return formatDate(date, format);
+  }
+  const y = date.getUTCFullYear();
+  const m = date.getUTCMonth() + 1;
+  const d = date.getUTCDate();
+  return format.replace(/YYYY/g, String(y)).replace(/MM/g, pad2(m)).replace(/DD/g, pad2(d));
+}

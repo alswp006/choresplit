@@ -55,3 +55,6 @@ export type useSaveErrorFn = () => { error: Error | null; clear: () => void };
 
 /** 라우트 간 전달 상태 접근 — useSearchParams 기반 (구현: 패킷 0022) */
 export type useRouteStateFn = <T = RouteState>(name: string) => T | null;
+
+/** 체크인 로그 엔티티 — 체크인 기록 (구현: 패킷 0002) */
+export type CheckinLog = { id: string; taskId: string; memberId: string; date: string; completedAt: string };

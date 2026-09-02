@@ -115,11 +115,11 @@ export function calcSettlement(
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/** 항목 빈도(frequency) 기준 기대 수행 횟수 — daily는 경과일수, weekly는 경과 주수 */
+/** 항목 빈도(frequencyDays) 기준 기대 수행 횟수 — frequencyDays 간격 기반 계산 */
 function expectedOccurrences(task: Task, now: number): number {
-  const end = task.archivedAt ?? now;
-  const elapsedDays = Math.max(0, Math.floor((end - task.createdAt) / MS_PER_DAY) + 1);
-  return task.frequency === "daily" ? elapsedDays : Math.max(1, Math.ceil(elapsedDays / 7));
+  const createdTime = new Date(task.createdAt).getTime();
+  const elapsedDays = Math.max(0, Math.floor((now - createdTime) / MS_PER_DAY) + 1);
+  return Math.max(1, Math.ceil(elapsedDays / task.frequencyDays));
 }
 
 /**
@@ -135,7 +135,7 @@ export function calculateFinesOwed(
   const now = Date.now();
   let total = 0;
   for (const task of tasks) {
-    if (task.assignee !== memberId) continue;
+    if (task.assigneeId !== memberId) continue;
     const expected = expectedOccurrences(task, now);
     const actual = checkins.filter(
       (c) => c.taskId === task.id && c.memberId === memberId

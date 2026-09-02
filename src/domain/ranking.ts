@@ -73,16 +73,16 @@ export function getWeeklyRankings(
       date: c.date,
       taskId: c.taskId,
       memberId: c.memberId,
-      weight: 2,
-      createdAt: c.completedAt,
+      weight: 2 as Difficulty,
+      createdAt: new Date(c.completedAt).getTime(),
     }));
 
   const domainMembers: Member[] = members.map((m) => ({
     id: m.id,
     name: m.name,
     emoji: "",
-    targetShare: m.targetRatio ?? 0,
-    createdAt: m.joinedAt,
+    targetShare: 1 / members.length,
+    createdAt: new Date(m.joinedAt).getTime(),
   }));
 
   return calcRanking(logs, domainMembers, weekKey).map((row) => ({
