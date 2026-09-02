@@ -1,7 +1,28 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, type Plugin } from 'vitest/config';
 import path from 'path';
 
+// jsdom 환경에서는 vitest가 `new URL(literal, import.meta.url)`을 브라우저 자산
+// 로더 패턴으로 취급해 dev-server 상대 URL(http://localhost:3000/...)로 치환한다 —
+// node:url의 fileURLToPath가 기대하는 file:// URL이 아니라서 테스트가 자기 소스
+// 파일을 읽는 흔한 패턴(예: "console.error 호출 0건" 검증)이 깨진다. import.meta.url을
+// 아예 거치지 않도록, 변환 시점에 이미 알고 있는 파일 절대경로로 직접 리터럴 치환한다.
+const ignoreImportMetaUrlAssetPlugin: Plugin = {
+  name: 'resolve-import-meta-url-new-url-literally',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!id.includes('__tests__') || !code.includes('import.meta.url')) return null;
+    const re = /new\s+URL\s*\(\s*(['"`])((?:(?!\1).)*)\1\s*,\s*import\.meta\.url\s*\)/g;
+    if (!re.test(code)) return null;
+    const dir = path.dirname(id);
+    return code.replace(re, (_match, _quote, relPath) => {
+      const abs = path.resolve(dir, relPath);
+      return `new URL(${JSON.stringify('file://' + abs)})`;
+    });
+  },
+};
+
 export default defineConfig({
+  plugins: [ignoreImportMetaUrlAssetPlugin],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
