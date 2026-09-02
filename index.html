@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+<!--__preview_diag__--><script>(function(){
+var shown=false;
+function show(title,detail){
+  if(shown)return; shown=true;
+  try{
+    var d=document.createElement('div');
+    d.setAttribute('style','position:fixed;inset:0;z-index:2147483647;overflow:auto;padding:20px 16px;'+
+      'background:#fff;color:#18181b;font:14px/1.6 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;-webkit-text-size-adjust:100%');
+    var h=document.createElement('div');
+    h.setAttribute('style','font-size:16px;font-weight:700;margin-bottom:10px;color:#b91c1c');
+    h.appendChild(document.createTextNode('\u26A0 '+title));
+    var p=document.createElement('pre');
+    p.setAttribute('style','white-space:pre-wrap;word-break:break-word;background:#f4f4f5;border:1px solid #e4e4e7;'+
+      'border-radius:8px;padding:12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 12px');
+    p.appendChild(document.createTextNode(detail));
+    var n=document.createElement('div');
+    n.setAttribute('style','font-size:12px;color:#71717a');
+    n.appendChild(document.createTextNode(
+      '이 화면은 미리보기 전용 진단입니다. 토스 SDK(로그인·결제·햅틱·SafeArea)는 일반 브라우저에서 동작하지 않으므로, '+
+      '그와 무관한 오류인지 먼저 보세요. 이 문구 자체는 앱에 포함되지 않습니다.'));
+    d.appendChild(h); d.appendChild(p); d.appendChild(n);
+    document.body.appendChild(d);
+  }catch(e){
+    try{ document.body.innerText='오류: '+title+'\n'+detail; }catch(e2){}
+  }
+}
+window.addEventListener('error',function(e){
+  if(e && e.target && e.target !== window && e.target.tagName){
+    show('리소스를 불러오지 못했습니다', String(e.target.tagName)+': '+String(e.target.src||e.target.href||''));
+    return;
+  }
+  show('자바스크립트 오류', String((e&&e.message)||'unknown')+'\n'+String((e&&e.filename)||'')+':'+String((e&&e.lineno)||''));
+},true);
+window.addEventListener('unhandledrejection',function(e){
+  var r=e&&e.reason; show('처리되지 않은 Promise 거부', String((r&&r.stack)||(r&&r.message)||r));
+});
+window.addEventListener('load',function(){
+  setTimeout(function(){
+    var el=document.getElementById('root')||document.body;
+    var txt=(el&&el.textContent||'').trim();
+    if((!el||el.children.length===0) && txt.length===0){
+      show('앱이 아무것도 그리지 않았습니다','오류는 보고되지 않았는데 화면이 비어 있습니다.\n'+
+        '라우팅(초기 경로 불일치)이나 렌더 중단이 원인일 수 있습니다.\nURL: '+location.href);
+    }
+  },4000);
+});
+})();</script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>choresplit</title>
+    <script type="module" crossorigin src="/choresplit/assets/index-DEN8k82r.js"></script>
+    <link rel="stylesheet" crossorigin href="/choresplit/assets/index-B7_gG0Ow.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
