@@ -15,13 +15,13 @@ describe("Packet-0001: 도메인 타입 + RouteState 정의", () => {
       const trimmed = line.trim();
       return (trimmed.startsWith("import ") || trimmed.startsWith("export import")) && !trimmed.startsWith("import.meta");
     });
-    expect(importLines).toHaveLength(0, "types.ts should not have any top-level import statements");
+    expect(importLines).toHaveLength(0);
 
     // Check: no function definitions (function keyword or arrow function body logic)
     // Allow const definitions (which can be constants or types)
     const functionPattern = /^\s*(export\s+)?(async\s+)?function\s+\w+/;
     const functionLines = lines.filter(line => functionPattern.test(line));
-    expect(functionLines).toHaveLength(0, "types.ts should not have any function definitions");
+    expect(functionLines).toHaveLength(0);
   });
 
   // AC-2: STORAGE_KEYS 7개 키 정의 확인
@@ -95,15 +95,15 @@ describe("Packet-0001: 도메인 타입 + RouteState 정의", () => {
     const content = fs.readFileSync(typesPath, "utf-8");
 
     // Should not contain: function definitions, arrow functions, imperative logic
-    expect(content).not.toMatch(/^\s*function\s+\w+/m, "types.ts should not have function declarations");
-    expect(content).not.toMatch(/^\s*export\s+function\s+\w+/m, "types.ts should not export functions");
+    expect(content).not.toMatch(/^\s*function\s+\w+/m);
+    expect(content).not.toMatch(/^\s*export\s+function\s+\w+/m);
 
     // Should contain: interface, type, const (for constants only)
     const hasInterfaces = /interface\s+\w+/m.test(content);
     const hasTypes = /type\s+\w+/m.test(content);
     const hasConsts = /const\s+[A-Z_]+\s*=/m.test(content); // Uppercase = likely constants
 
-    expect(hasInterfaces || hasTypes || hasConsts).toBe(true, "types.ts should contain type definitions or constants");
+    expect(hasInterfaces || hasTypes || hasConsts).toBe(true);
   });
 
   // AC-2 Extended: Verify STORAGE_KEYS immutability
@@ -112,8 +112,8 @@ describe("Packet-0001: 도메인 타입 + RouteState 정의", () => {
     const pattern = /^choresplit:[a-z0-9_:\.]+$/;
 
     for (const [key, value] of Object.entries(types.STORAGE_KEYS)) {
-      expect(typeof value).toBe("string", `STORAGE_KEYS.${key} should be a string`);
-      expect(value).toMatch(pattern, `STORAGE_KEYS.${key} value should match 'choresplit:*' pattern`);
+      expect(typeof value).toBe("string");
+      expect(value).toMatch(pattern);
       expect(value).toContain("choresplit:");
     }
   });
