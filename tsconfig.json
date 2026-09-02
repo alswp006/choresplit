@@ -27,7 +27,8 @@
     "baseUrl": "."
   },
   "include": [
-    "src"
+    "src",
+    "vitest.setup.ts"
   ],
   "exclude": [
     "src/**/__*.ts",
