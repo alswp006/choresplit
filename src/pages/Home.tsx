@@ -1,72 +1,167 @@
-import { Top, Paragraph, Spacing, ListRow, Button } from '@toss/tds-mobile';
+import { useMemo, useState } from 'react';
+import { Top, Button, Tab, Paragraph, Spacing, Badge } from '@toss/tds-mobile';
 import { useNavigate } from 'react-router-dom';
-import { ScreenScaffold } from '../components/ScreenScaffold';
-import { SummaryHero } from '../components/SummaryHero';
-import { Card } from '../components/Card';
+import { generateHapticFeedback } from '@apps-in-toss/web-framework';
+import { useAppStore } from '@/lib/store';
+import { ScreenScaffold } from '@/components/ScreenScaffold';
+import { SummaryHero } from '@/components/SummaryHero';
+import { Card } from '@/components/Card';
+import { Amount } from '@/components/Amount';
+import { Sparkline } from '@/components/Sparkline';
+import { LoadingState } from '@/components/StateView';
+import { todayKST, weekKeyOf, shouldShowReminder, getKSTDate } from '@/domain/date';
+import { calcStreak } from '@/domain/streak';
 
-/**
- * Golden Home page — 대시보드/탭-루트 골든 레퍼런스.
- *
- * 다른 페이지를 쓸 때 이 패턴을 모방하라:
- * - ScreenScaffold로 감싼다(raw fragment 골격 금지) — safe-area + 100dvh 자동 처리.
- * - 화면 최상단에 SummaryHero로 시각 앵커를 만든다('휑함'의 가장 큰 원인은 앵커 부재).
- *   데이터가 있으면 value에 <Amount value={n} unit="원" typography="t1" />로 핵심 숫자를 크게 박아라.
- * - 1차 진입 액션은 SummaryHero 카드 내부 버튼(display="block", 전체폭)에 둔다.
- *   → 화면 중앙 부유/좌측 글자폭 버튼 금지. 하단 TabBar가 있으면 SubmitFooter와 겹치므로 카드 안에.
- * - 핵심 정보는 raw <div>가 아니라 Card로 묶어 위계를 만든다.
- * - 하단 탭이 필요하면(2~5탭): bottom={<FloatingTabBar items={[{label,path}...]} />}.
- *   ('TDS TabBar'는 존재하지 않는다 — 직접 만들지 말고 FloatingTabBar를 써라.)
- * - 카피는 CLAUDE.md "카피 규칙 — AI 냄새 금지"를 따른다: 기능 나열식 홍보 문구·상투구·
- *   generic 버튼("시작하기") 금지. 이 파일의 예시 문구도 앱 맥락에 맞게 교체 대상이다.
- *
- * Scaffold tokens (replaced by scaffold-toss.ts at project creation):
- *   choresplit -> the app's display name
- *   동거인과 집안일 기여도를 매일 기록해 공정하게 정산해주는 가사분담 트래커    -> the one-line description
- */
+function pad2(n: number): string {
+  return n < 10 ? `0${n}` : `${n}`;
+}
 
-// ⚠ 이 목록은 골격 예시다 — 앱의 실제 콘텐츠(핵심 지표·최근 기록·바로가기)로 반드시 교체하라.
-// '간편한 사용/빠른 처리' 같은 기능 나열식 홍보 문구는 카피 규칙(CLAUDE.md "AI 냄새 금지") 위반이다.
-// 사용자가 이 화면에서 실제로 확인할 정보를 넣어라 — 아래처럼 데이터가 사는 행으로.
-const HIGHLIGHTS = [
-  { title: '오늘', description: '아직 기록이 없어요' },
-  { title: '이번 주', description: '기록 3건 · 평균 12분' },
-];
+/** 현재 KST 시각을 "HH:MM"으로 (shouldShowReminder 비교용) */
+function nowHHMM(): string {
+  const d = getKSTDate();
+  return `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
+}
+
+/** todayKey부터 과거로 n일치 dateKey 배열(오름차순) */
+function pastDays(todayKey: string, n: number): string[] {
+  const [y, m, d] = todayKey.split('-').map(Number);
+  const keys: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const dt = new Date(Date.UTC(y, m - 1, d - i));
+    keys.push(`${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`);
+  }
+  return keys;
+}
+
+const TOP_TITLE = '오늘의 체크인';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { booting, household, logs, settings, schemaCompatible, saveSettings } = useAppStore();
+
+  const members = household?.members ?? [];
+  const [memberIdx, setMemberIdx] = useState(() => {
+    const idx = members.findIndex((m) => m.id === settings.activeMemberId);
+    return idx >= 0 ? idx : 0;
+  });
+  const activeMember = members[memberIdx] ?? null;
+
+  const today = todayKST();
+
+  const todayLogCount = useMemo(() => logs.filter((l) => l.date === today).length, [logs, today]);
+
+  const todayWeight = useMemo(() => {
+    if (!activeMember) return 0;
+    return logs
+      .filter((l) => l.date === today && l.memberId === activeMember.id)
+      .reduce((sum, l) => sum + l.weight, 0);
+  }, [logs, today, activeMember]);
+
+  const streakDays = activeMember ? calcStreak(logs, activeMember.id, today).streakDays : 0;
+
+  const weekTrend = useMemo(() => {
+    if (!activeMember) return [];
+    return pastDays(today, 7).map((day) =>
+      logs
+        .filter((l) => l.date === day && l.memberId === activeMember.id)
+        .reduce((sum, l) => sum + l.weight, 0),
+    );
+  }, [logs, today, activeMember]);
+
+  const showReminder =
+    !booting &&
+    shouldShowReminder(nowHHMM(), settings.reminderTime, 0, settings.reminderEnabled) &&
+    todayLogCount === 0;
+
+  function handleSelectMember(idx: number) {
+    setMemberIdx(idx);
+    const member = members[idx];
+    if (member) {
+      saveSettings({ ...settings, activeMemberId: member.id });
+    }
+    try {
+      generateHapticFeedback({ type: 'tickWeak' });
+    } catch {
+      /* WebView 밖 — 무시 */
+    }
+  }
+
+  function handleHeroClick() {
+    navigate('/report', { state: { weekKey: weekKeyOf(today) } });
+  }
+
+  if (booting) {
+    return (
+      <ScreenScaffold top={<Top title={<Top.TitleParagraph>{TOP_TITLE}</Top.TitleParagraph>} />}>
+        <div data-testid="boot-skeleton">
+          <LoadingState rows={6} />
+        </div>
+      </ScreenScaffold>
+    );
+  }
 
   return (
     <ScreenScaffold
-      top={<Top title={<Top.TitleParagraph>choresplit</Top.TitleParagraph>} />}
+      top={
+        <Top
+          title={<Top.TitleParagraph>{TOP_TITLE}</Top.TitleParagraph>}
+          right={
+            <Button variant="weak" size="small" onClick={() => navigate('/invite')}>
+              초대
+            </Button>
+          }
+        />
+      }
     >
-      {/* 시각 앵커: 헤드라인 + 카드 내 진입 버튼(부유 금지, display="block" 전체폭).
-          데이터 앱이면 value를 <Amount typography="t1" />(핵심 숫자)로 교체하라. */}
-      <SummaryHero
-        label="choresplit"
-        value={<Paragraph.Text typography="t2">동거인과 집안일 기여도를 매일 기록해 공정하게 정산해주는 가사분담 트래커</Paragraph.Text>}
-        caption="로그인 없이 바로 쓸 수 있어요"
-        action={
-          // 라벨은 앱의 핵심 행동 동사로 교체하라 — "연봉 계산하기"/"기록 남기기" 등.
-          // generic "시작하기"/"확인"은 카피 규칙 위반. onClick도 실제 첫 화면 경로로.
-          <Button variant="fill" display="block" onClick={() => navigate('/')}>
-            첫 결과 보기
-          </Button>
-        }
-        testId="home-hero"
-      />
+      {!schemaCompatible ? (
+        <>
+          <Card testId="schema-banner">
+            <Paragraph.Text typography="st11">기록 형식이 달라 일부 기능이 제한돼요</Paragraph.Text>
+          </Card>
+          <Spacing size={16} />
+        </>
+      ) : null}
 
-      <Spacing size={24} />
+      {showReminder ? (
+        <>
+          <Card testId="reminder-banner">
+            <Paragraph.Text typography="t6">오늘 아직 체크인하지 않았어요</Paragraph.Text>
+            <Spacing size={4} />
+            <Paragraph.Text typography="st11">집안일 하나만 기록해볼까요?</Paragraph.Text>
+          </Card>
+          <Spacing size={16} />
+        </>
+      ) : null}
 
-      {/* 핵심 정보는 Card로 묶기(raw div 금지) — 위계 생성 */}
-      <Card testId="home-highlights">
-        {HIGHLIGHTS.map((h, idx) => (
-          <ListRow
-            key={idx}
-            contents={<ListRow.Texts type="2RowTypeA" top={h.title} bottom={h.description} />}
-          />
-        ))}
-      </Card>
+      {members.length > 0 ? (
+        <>
+          <Tab onChange={handleSelectMember}>
+            {members.map((m, i) => (
+              <Tab.Item key={m.id} selected={i === memberIdx} onClick={() => handleSelectMember(i)}>
+                {m.emoji} {m.name}
+              </Tab.Item>
+            ))}
+          </Tab>
+          <Spacing size={16} />
+        </>
+      ) : null}
 
+      <div data-testid="today-summary-hero" role="button" tabIndex={0} onClick={handleHeroClick} style={{ cursor: 'pointer' }}>
+        <SummaryHero
+          label="오늘 기여 점수"
+          value={<Amount value={todayWeight} unit="점" typography="t1" />}
+          caption={
+            streakDays > 0 ? (
+              <Badge size="small" variant="weak" color="blue">
+                {streakDays}일 연속 기록 중
+              </Badge>
+            ) : undefined
+          }
+        />
+      </div>
+
+      <Spacing size={16} />
+      <Sparkline testId="week-sparkline" data={weekTrend} />
       <Spacing size={24} />
     </ScreenScaffold>
   );
