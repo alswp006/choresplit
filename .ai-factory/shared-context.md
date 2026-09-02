@@ -238,6 +238,7 @@ export interface MemberWeekStat {
   hooks/
   lib/
     contract.ts
+    household.ts
     storage.ts
     types.ts
     utils.ts
@@ -253,6 +254,7 @@ export interface MemberWeekStat {
 
 ### Exports (src/lib/)
 - contract.ts: export type loadStateFn = () => ChoreSplitState; export type saveStateFn = (state: ChoreSplitState) => SaveResult; export type createHouseholdFn = (name: string, myName: string) => ChoreSplitState; export type buildWeeklyReportFn = (state: ChoreSplitState, weekStart: string) => WeeklyReport; export type computeSettlementFn = ( report: WeeklyReport, members: Member[] ) =>; export type getStreakFn = (state: ChoreSplitState, memberId: string, today?: string) => number; export type getRankingFn = (state: ChoreSplitState, days?: number) => MemberWeekStat[]; export type useAppStateFn = () =>
+- household.ts: export function seedDefaultChores(): Chore[]; export function createHousehold( name: string, myName: string ): ChoreSplitState &; export function validateOnboarding( householdName: string, memberName: string ):; export interface AddChoreInput; export function addChore(state: ChoreSplitState, input: AddChoreInput): Result; export function updateChore( state: ChoreSplitState, choreId: ChoreId, patch: Partial<Pick<Chore, "name" | "weight" | "f; export function toggleChoreActive(state: ChoreSplitState, choreId: ChoreId): Result; export function addMember(state: ChoreSplitState, name: string): Result
 - storage.ts: export const DEFAULT_STATE: ChoreSplitState =; export function getItem<T>(key: string): T | null; export function setItem<T>(key: string, value: T): void; export function removeItem(key: string): void; export function loadState(): ChoreSplitState; export function saveState(state: ChoreSplitState): SaveResult; export function loadUnlocked(): Record<string, true>; export function unlockWeek(weekStart: string): void
 - types.ts: export type MemberId = string; export type ChoreId = string; export type CheckInId = string; export type ColorToken = "blue" | "green" | "orange" | "purple"; export interface Member; export interface Chore; export interface CheckIn; export interface Household
 - utils.ts: export function cn(...classes: (string | boolean | undefined | null)[]): string; export function formatNumber(n: number): string; export function formatCurrency(n: number, currency = 'KRW'): string
@@ -277,6 +279,7 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 ## Already Implemented (do NOT duplicate or overwrite)
 - 0001: 타입 정의 (엔티티 + 파생 + RouteState) (files: src/lib/types.ts)
 - 0002: localStorage 저장소 모듈 (storage.ts) (files: src/lib/storage.ts)
+- 0003: 가구 생성·시드 + 엔티티 mutation 헬퍼 (files: src/lib/household.ts)
 
 ## Available exports from existing files
 // src/App.tsx
@@ -340,10 +343,12 @@ export type getRankingFn = (state: ChoreSplitState, days?: number) => MemberWeek
 export type useAppStateFn = () => {
 export type SettingsPatch = Partial<Settings>;
 
-// src/lib/storage.ts
-export const DEFAULT_STATE: ChoreSplitState = {
-export function getItem<T>(key: string): T | null {
-export function setItem<T>(key: string, value: T): v
+// src/lib/household.ts
+export function seedDefaultChores(): Chore[] {
+export function createHousehold(
+export function validateOnboarding(
+export interface AddChoreInput {
+e
 
 ## Memory Index (자동 학습 — 힌트로만 사용, 실제 코드 확인 필수)
 

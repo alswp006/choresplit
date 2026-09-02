@@ -189,7 +189,7 @@ describe("Weekly Report Calculation Engine + Settlement", () => {
       expect(result.stats[2].weightedScore).toBe(1);
     });
 
-    it("excludes inactive members from stats", () => {
+    it("includes all members in stats, even with zero check-ins in the week", () => {
       const state: ChoreSplitState = {
         version: 1,
         household: null,
@@ -219,14 +219,6 @@ describe("Weekly Report Calculation Engine + Settlement", () => {
             weightAtLog: 2,
             createdAt: "2026-08-31T00:00:00Z",
           },
-          {
-            id: "2026-09-01__c2__m2",
-            date: "2026-09-01",
-            choreId: "c2",
-            memberId: "m2",
-            weightAtLog: 2,
-            createdAt: "2026-09-01T00:00:00Z",
-          },
         ],
         settings: {
           reminderEnabled: true,
@@ -239,8 +231,15 @@ describe("Weekly Report Calculation Engine + Settlement", () => {
 
       const result = buildWeeklyReport(state, "2026-08-31");
 
-      expect(result.stats).toHaveLength(1);
-      expect(result.stats[0].memberId).toBe("m1");
+      expect(result.stats).toHaveLength(2);
+      const m2Stat = result.stats.find((s) => s.memberId === "m2");
+      expect(m2Stat).toEqual({
+        memberId: "m2",
+        memberName: "Bob",
+        count: 0,
+        weightedScore: 0,
+        sharePct: 0,
+      });
     });
   });
 
@@ -623,17 +622,17 @@ describe("Weekly Report Calculation Engine + Settlement", () => {
       const result = buildWeeklyReport(state, "2026-08-31");
 
       expect(result.topChores).toHaveLength(3);
-      // Sorted by count desc, then name asc: c1(2, "Cook" < "Wash"), c3(2), c2(1)
-      // Wait: c1="Wash", c3="Cook", c2="Vacuum"
-      // c1: 2, c3: 2 (alphabetically "Cook" < "Wash"), c2: 1
+      // Sorted by count desc, then name asc:
+      // c1="Wash"(2), c2="Vacuum"(1), c3="Cook"(2), c4="Dishes"(1)
+      // count=2 tier: "Cook"(c3) < "Wash"(c1); count=1 tier: "Dishes"(c4) < "Vacuum"(c2)
       expect(result.topChores[0].choreId).toBe("c3");
       expect(result.topChores[0].choreName).toBe("Cook");
       expect(result.topChores[0].count).toBe(2);
       expect(result.topChores[1].choreId).toBe("c1");
       expect(result.topChores[1].choreName).toBe("Wash");
       expect(result.topChores[1].count).toBe(2);
-      expect(result.topChores[2].choreId).toBe("c2");
-      expect(result.topChores[2].choreName).toBe("Vacuum");
+      expect(result.topChores[2].choreId).toBe("c4");
+      expect(result.topChores[2].choreName).toBe("Dishes");
       expect(result.topChores[2].count).toBe(1);
     });
 
@@ -862,22 +861,53 @@ describe("Weekly Report Calculation Engine + Settlement", () => {
     });
 
     it("does not mutate input state", () => {
-      const state: AppState = {
+      const state: ChoreSplitState = {
+        version: 1,
+        household: null,
         members: [
-          { id: "m1", name: "Alice", joinDate: "2026-01-01", active: true },
-          { id: "m2", name: "Bob", joinDate: "2026-01-01", active: true },
-        ],
-        chores: [{ id: "c1", name: "Chore1", weight: 10, frequencyDays: 1 }],
-        logs: [
           {
-            id: "l1",
-            memberId: "m1",
-            choreId: "c1",
-            date: "2026-08-31",
-            weightAtLog: 50,
+            id: "m1",
+            name: "Alice",
+            colorToken: "blue",
+            isMe: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "m2",
+            name: "Bob",
+            colorToken: "green",
+            isMe: false,
+            createdAt: "2026-01-01T00:00:00Z",
           },
         ],
-        settings: { penaltyAmount: 5000 },
+        chores: [
+          {
+            id: "c1",
+            name: "Chore1",
+            weight: 2,
+            frequency: "daily",
+            penaltyAmount: 5000,
+            active: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        checkIns: [
+          {
+            id: "2026-08-31__c1__m1",
+            date: "2026-08-31",
+            choreId: "c1",
+            memberId: "m1",
+            weightAtLog: 2,
+            createdAt: "2026-08-31T00:00:00Z",
+          },
+        ],
+        settings: {
+          reminderEnabled: true,
+          reminderHour: 21,
+          penaltyEnabled: true,
+          lastReminderShownDate: null,
+        },
+        settlements: [],
       };
 
       const stateBefore = JSON.stringify(state);
@@ -888,22 +918,53 @@ describe("Weekly Report Calculation Engine + Settlement", () => {
     });
 
     it("buildSettlement also does not mutate input state", () => {
-      const state: AppState = {
+      const state: ChoreSplitState = {
+        version: 1,
+        household: null,
         members: [
-          { id: "m1", name: "Alice", joinDate: "2026-01-01", active: true },
-          { id: "m2", name: "Bob", joinDate: "2026-01-01", active: true },
-        ],
-        chores: [],
-        logs: [
           {
-            id: "l1",
-            memberId: "m1",
-            choreId: "c1",
-            date: "2026-08-31",
-            weightAtLog: 100,
+            id: "m1",
+            name: "Alice",
+            colorToken: "blue",
+            isMe: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "m2",
+            name: "Bob",
+            colorToken: "green",
+            isMe: false,
+            createdAt: "2026-01-01T00:00:00Z",
           },
         ],
-        settings: { penaltyAmount: 5000 },
+        chores: [
+          {
+            id: "c1",
+            name: "Chore1",
+            weight: 2,
+            frequency: "daily",
+            penaltyAmount: 5000,
+            active: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        checkIns: [
+          {
+            id: "2026-08-31__c1__m1",
+            date: "2026-08-31",
+            choreId: "c1",
+            memberId: "m1",
+            weightAtLog: 2,
+            createdAt: "2026-08-31T00:00:00Z",
+          },
+        ],
+        settings: {
+          reminderEnabled: true,
+          reminderHour: 21,
+          penaltyEnabled: true,
+          lastReminderShownDate: null,
+        },
+        settlements: [],
       };
 
       const stateBefore = JSON.stringify(state);
@@ -917,71 +978,130 @@ describe("Weekly Report Calculation Engine + Settlement", () => {
   // Settlement distribution logic
   describe("buildSettlement: penalty distribution inverse to contribution", () => {
     it("distributes missed penalties from low-contributors to high-contributors", () => {
-      const state: AppState = {
+      const state: ChoreSplitState = {
+        version: 1,
+        household: null,
         members: [
-          { id: "m1", name: "Alice", joinDate: "2026-01-01", active: true },
-          { id: "m2", name: "Bob", joinDate: "2026-01-01", active: true },
-        ],
-        chores: [],
-        logs: [
           {
-            id: "l1",
-            memberId: "m1",
-            choreId: "c1",
+            id: "m1",
+            name: "Alice",
+            colorToken: "blue",
+            isMe: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "m2",
+            name: "Bob",
+            colorToken: "green",
+            isMe: false,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        chores: [
+          {
+            id: "c1",
+            name: "Chore1",
+            weight: 2,
+            frequency: "daily",
+            penaltyAmount: 0, // no penalty from this chore, only feeds the stats
+            active: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "c2",
+            name: "Chore2",
+            weight: 1,
+            frequency: "weekly",
+            penaltyAmount: 10000, // missed entirely by everyone -> generates the penalty pool
+            active: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        checkIns: [
+          // Alice does all the work (high contribution), Bob does none (low contribution)
+          {
+            id: "2026-08-31__c1__m1",
             date: "2026-08-31",
-            weightAtLog: 100,
-          }, // Alice: 100 (high)
-          {
-            id: "l2",
-            memberId: "m2",
-            choreId: "c2",
-            date: "2026-09-01",
-            weightAtLog: 0,
-          }, // Bob: 0 (low, should pay penalty)
+            choreId: "c1",
+            memberId: "m1",
+            weightAtLog: 2,
+            createdAt: "2026-08-31T00:00:00Z",
+          },
         ],
-        settings: { penaltyAmount: 10000 },
+        settings: {
+          reminderEnabled: true,
+          reminderHour: 21,
+          penaltyEnabled: true,
+          lastReminderShownDate: null,
+        },
+        settlements: [],
       };
 
       const result = buildSettlement(state, "2026-08-31");
 
-      // Bob has 0 logs (7 days × 10000 = 70000 penalty)
-      // Should transfer from Bob to Alice
-      const bobToAlice = result.find(
-        (line) => line.from === "m2" && line.to === "m1"
+      // Bob (m2, 0% share) should pay Alice (m1, 100% share)
+      const bobToAlice = result.lines.find(
+        (line) => line.fromMemberId === "m2" && line.toMemberId === "m1"
       );
       expect(bobToAlice).toBeDefined();
-      expect(bobToAlice?.amount).toBeGreaterThan(0);
+      expect(bobToAlice!.amount).toBeGreaterThan(0);
+      expect(Number.isInteger(bobToAlice!.amount)).toBe(true);
     });
 
     it("returns empty settlement when no penalties exist", () => {
-      const state: AppState = {
+      const state: ChoreSplitState = {
+        version: 1,
+        household: null,
         members: [
-          { id: "m1", name: "Alice", joinDate: "2026-01-01", active: true },
-          { id: "m2", name: "Bob", joinDate: "2026-01-01", active: true },
-        ],
-        chores: [],
-        logs: [
           {
-            id: "l1",
-            memberId: "m1",
-            choreId: "c1",
+            id: "m1",
+            name: "Alice",
+            colorToken: "blue",
+            isMe: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "m2",
+            name: "Bob",
+            colorToken: "green",
+            isMe: false,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        chores: [
+          {
+            id: "c1",
+            name: "Chore1",
+            weight: 2,
+            frequency: "weekly",
+            penaltyAmount: 0, // No penalty
+            active: true,
+            createdAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        checkIns: [
+          {
+            id: "2026-08-31__c1__m1",
             date: "2026-08-31",
-            weightAtLog: 50,
-          },
-          {
-            id: "l2",
-            memberId: "m2",
-            choreId: "c2",
-            date: "2026-09-01",
-            weightAtLog: 50,
+            choreId: "c1",
+            memberId: "m1",
+            weightAtLog: 2,
+            createdAt: "2026-08-31T00:00:00Z",
           },
         ],
-        settings: { penaltyAmount: 0 }, // No penalty
+        settings: {
+          reminderEnabled: true,
+          reminderHour: 21,
+          penaltyEnabled: true,
+          lastReminderShownDate: null,
+        },
+        settlements: [],
       };
 
       const result = buildSettlement(state, "2026-08-31");
 
-      expect(result).toEqual([]);
+      expect(result.totalPenalty).toBe(0);
+      expect(result.lines).toEqual([]);
     });
   });
 });
