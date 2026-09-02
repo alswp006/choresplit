@@ -17,6 +17,7 @@ const ROUTES: { path: string; name: string }[] = [
   { path: "/members", name: "members" },
   { path: "/report/detail", name: "report-detail" },
   { path: "/settle", name: "settle" },
+  { path: "/streak", name: "streak" },
   // { path: "/result", name: "result" },   // ← 이 앱의 라우트를 추가
   // { path: "/settings", name: "settings" },
 ];
@@ -47,7 +48,12 @@ async function seed(page: Page): Promise<void> {
   // 데이터를 렌더한다. /report/detail은 추가로 이번 주가 "choresplit:report-unlocked"에 잠금
   // 해제돼 있어야 /report로 리다이렉트되지 않는다. 날짜는 실행 시점(KST) 기준으로 브라우저 안에서 계산한다.
   await page.addInitScript(() => {
-    if (window.location.pathname !== "/report/detail" && window.location.pathname !== "/settle") return;
+    if (
+      window.location.pathname !== "/report/detail" &&
+      window.location.pathname !== "/settle" &&
+      window.location.pathname !== "/streak"
+    )
+      return;
 
     const todayKST = () => {
       const now = new Date();
