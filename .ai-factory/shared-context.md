@@ -241,6 +241,7 @@ export interface MemberWeekStat {
     household.ts
     report.ts
     storage.ts
+    streak.ts
     types.ts
     utils.ts
   main.tsx
@@ -258,6 +259,7 @@ export interface MemberWeekStat {
 - household.ts: export function seedDefaultChores(): Chore[]; export function createHousehold( name: string, myName: string ): ChoreSplitState &; export function validateOnboarding( householdName: string, memberName: string ):; export interface AddChoreInput; export function addChore(state: ChoreSplitState, input: AddChoreInput): Result; export function updateChore( state: ChoreSplitState, choreId: ChoreId, patch: Partial<Pick<Chore, "name" | "weight" | "f; export function toggleChoreActive(state: ChoreSplitState, choreId: ChoreId): Result; export function addMember(state: ChoreSplitState, name: string): Result
 - report.ts: export function getWeekStart(date: string): string; export function getWeekEnd(date: string): string; export function buildWeeklyReport( state: ChoreSplitState, weekStart: string ): WeeklyReport; export function computeSettlement( report: WeeklyReport, members: Member[] ):; export function buildSettlement( state: ChoreSplitState, weekStart: string ):
 - storage.ts: export const DEFAULT_STATE: ChoreSplitState =; export function getItem<T>(key: string): T | null; export function setItem<T>(key: string, value: T): void; export function removeItem(key: string): void; export function loadState(): ChoreSplitState; export function saveState(state: ChoreSplitState): SaveResult; export function loadUnlocked(): Record<string, true>; export function unlockWeek(weekStart: string): void
+- streak.ts: export function getStreak( state: ChoreSplitState, memberId: string, today: string = todayKST() ): number; export function getRanking( state: ChoreSplitState, days: number = 30 ): MemberWeekStat[]; export function countTodayCheckIns( state: ChoreSplitState, memberId: string, today: string ): number; export function shouldShowReminder( settings: Settings, now: Date, todayMyCheckInCount: number ): boolean
 - types.ts: export type MemberId = string; export type ChoreId = string; export type CheckInId = string; export type ColorToken = "blue" | "green" | "orange" | "purple"; export interface Member; export interface Chore; export interface CheckIn; export interface Household
 - utils.ts: export function cn(...classes: (string | boolean | undefined | null)[]): string; export function formatNumber(n: number): string; export function formatCurrency(n: number, currency = 'KRW'): string
 
@@ -276,6 +278,9 @@ export interface MemberWeekStat {
 - SummaryHero.tsx: SummaryHero
 - TossPurchase.tsx: TossPurchase
 - TossRewardAd.tsx: TossRewardAd
+
+### Module Dependencies (import graph)
+  lib/streak.ts → imports: lib/types
 CRITICAL: Before creating any new function, type, or component, check the list above. If something similar exists, import and use it.
 
 ## Already Implemented (do NOT duplicate or overwrite)
@@ -283,83 +288,4 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 - 0002: localStorage 저장소 모듈 (storage.ts) (files: src/lib/storage.ts)
 - 0003: 가구 생성·시드 + 엔티티 mutation 헬퍼 (files: src/lib/household.ts)
 - 0004: 주간 리포트 계산 엔진 + 정산 계산 (files: src/lib/report.ts)
-
-## Available exports from existing files
-// src/App.tsx
-export default function App() {
-
-// src/components/AdSlot.tsx
-export function AdSlot({ adGroupId, className, variant, theme }: AdSlotProps) {
-
-// src/components/Amount.tsx
-export function Amount({
-
-// src/components/BottomCTA.tsx
-export function SubmitFooter({
-export function ButtonStack({
-
-// src/components/Card.tsx
-export function Card({
-
-// src/components/CountUp.tsx
-export function CountUp({
-
-// src/components/FloatingTabBar.tsx
-export type TabItem = {
-export function FloatingTabBar({ items }: { items: TabItem[] }) {
-
-// src/components/MiniBar.tsx
-export function MiniBar({
-
-// src/components/PageShell.tsx
-export function PageShell({ children, style }: { children: ReactNode; style?: CSSProperties }) {
-
-// src/components/ScreenScaffold.tsx
-export function ScreenScaffold({
-
-// src/components/Sparkline.tsx
-export function Sparkline({
-
-// src/components/StateView.tsx
-export function EmptyState({
-export function LoadingState({
-
-// src/components/SummaryHero.tsx
-export function SummaryHero({
-
-// src/components/TossPurchase.tsx
-export interface TossPurchaseResult {
-export function TossPurchase({
-
-// src/components/TossRewardAd.tsx
-export function TossRewardAd({
-
-// src/lib/contract.ts
-export type {
-export type loadStateFn = () => ChoreSplitState;
-export type saveStateFn = (state: ChoreSplitState) => SaveResult;
-export type createHouseholdFn = (name: string, myName: string) => ChoreSplitState;
-export type buildWeeklyReportFn = (state: ChoreSplitState, weekStart: string) => WeeklyReport;
-export type computeSettlementFn = (
-export type getStreakFn = (state: ChoreSplitState, memberId: string, today?: string) => number;
-export type getRankingFn = (state: ChoreSplitState, days?: number) => MemberWeekStat[];
-export type useAppStateFn = () => {
-export type SettingsPatch = Partial<Settings>;
-
-// src/lib/household.ts
-export function seedDefaultChores(): Chore[] {
-export function createHousehold(
-export function validateOnboarding(
-export interface AddChoreInput {
-e
-
-## Memory Index (자동 학습 — 힌트로만 사용, 실제 코드 확인 필수)
-
-Available topics: deploy(1), general(10), testing(1), ui(1)
-
-Key lessons (verify against actual code before applying):
-- [general] 저장·데이터 접근 등 기반 계층 패킷은 이를 import 하는 화면 패킷보다 반드시 먼저 완료·병합하고, 미완료면 상위 화면 패킷 병합을 차단하라 — 빈 기반 모듈 하나가 전 라우트 스모크를 무너뜨린다. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 외부에서 들어온 모든 값(라우터 state, 로컬 저장소, 부분 입력 폼)은 사용 직전에 배열·객체 기본값으로 정규화하고, 테이블/맵 조회 결과는 존재 확인 후에만 하위 속성이나 length에 접근하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 의존 그래프 최하층의 타입·계약 파일은 런타임 코드 0줄의 순수 선언으로 가장 먼저 단독 타입체크를 통과시키고, 파일 생성은 셸 명령이 아닌 허용된 편집 도구로만 하게 강제하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 영속 저장소에서 읽은 값은 항상 스키마 기본값으로 정규화해 배열·객체 타입을 보장한 뒤 반환하고, 화면은 빈/손상/부분 데이터에서도 렌더되도록 방어하라. (60% · 타 앱 1회 — 맹신 금지)
-- [general] 정책·기능 제거형 리팩터링은 화면과 도메인 로직 레이어에서만 수행하고, package.json의 플랫폼 필수 의존성(디자인 시스템·플랫폼 SDK·프레임워크 코어)은 어떤 경우에도 삭제하지 말 것 — 필수 패키지 화이트리스트를 빌드 전 가드로 검증하라. (60% · 타 앱 1회 — 맹신 금지)
+- 0005: 스트릭·랭킹 계산 + 리마인더 판정 (files: src/lib/streak.ts)
