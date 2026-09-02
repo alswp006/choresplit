@@ -287,17 +287,14 @@ CRITICAL: Before creating any new function, type, or component, check the list a
 - 0012: 주간 리포트 상세 /report/detail (S6) (files: src/pages/ReportDetail.tsx)
 - 0013: 벌금 정산 제안 /settle (S7) (files: src/pages/Settle.tsx)
 - 0014: 스트릭·랭킹 /streak (S8) (files: src/pages/Streak.tsx)
-- 0001: 타입 정의 (엔티티 + 파생 + RouteState) (files: src/lib/types.ts)
-- 0002: localStorage 저장소 모듈 (storage.ts) (files: src/lib/storage.ts)
-- 0003: 가구 생성·시드 + 엔티티 mutation 헬퍼 (files: src/lib/household.ts)
-- 0004: 주간 리포트 계산 엔진 + 정산 계산 (files: src/lib/report.ts)
-- 0005: 스트릭·랭킹 계산 + 리마인더 판정 (files: src/lib/streak.ts)
-- 0006: 앱 전역 상태 컨테이너 (Context) (files: src/lib/store.tsx)
-- 0007: 온보딩 페이지 /onboarding (S1) (files: src/pages/Onboarding.tsx)
-- 0008: 홈(오늘 체크인) / (S2) (files: src/pages/Home.tsx)
-- 0009: 집안일 항목 관리 /chores (S3) (files: src/pages/Chores.tsx)
-- 0010: 동거인 관리 /members (S4) (files: src/pages/Members.tsx)
-- 0011: 주간 리포트 게이트 /report (S5) (files: src/pages/Report.tsx)
-- 0012: 주간 리포트 상세 /report/detail (S6) (files: src/pages/ReportDetail.tsx)
-- 0013: 벌금 정산 제안 /settle (S7) (files: src/pages/Settle.tsx)
-- 0014: 스트릭·랭킹 /streak (S8) (files: src/pages/Streak.tsx)
+
+## Memory Index (자동 학습 — 힌트로만 사용, 실제 코드 확인 필수)
+
+Available topics: deploy(1), general(10), testing(1), ui(1)
+
+Key lessons (verify against actual code before applying):
+- [general] 저장·데이터 접근 등 기반 계층 패킷은 이를 import 하는 화면 패킷보다 반드시 먼저 완료·병합하고, 미완료면 상위 화면 패킷 병합을 차단하라 — 빈 기반 모듈 하나가 전 라우트 스모크를 무너뜨린다. (60% · 타 앱 1회 — 맹신 금지)
+- [general] 외부에서 들어온 모든 값(라우터 state, 로컬 저장소, 부분 입력 폼)은 사용 직전에 배열·객체 기본값으로 정규화하고, 테이블/맵 조회 결과는 존재 확인 후에만 하위 속성이나 length에 접근하라. (60% · 타 앱 1회 — 맹신 금지)
+- [general] 의존 그래프 최하층의 타입·계약 파일은 런타임 코드 0줄의 순수 선언으로 가장 먼저 단독 타입체크를 통과시키고, 파일 생성은 셸 명령이 아닌 허용된 편집 도구로만 하게 강제하라. (60% · 타 앱 1회 — 맹신 금지)
+- [general] 영속 저장소에서 읽은 값은 항상 스키마 기본값으로 정규화해 배열·객체 타입을 보장한 뒤 반환하고, 화면은 빈/손상/부분 데이터에서도 렌더되도록 방어하라. (60% · 타 앱 1회 — 맹신 금지)
+- [general] 정책·기능 제거형 리팩터링은 화면과 도메인 로직 레이어에서만 수행하고, package.json의 플랫폼 필수 의존성(디자인 시스템·플랫폼 SDK·프레임워크 코어)은 어떤 경우에도 삭제하지 말 것 — 필수 패키지 화이트리스트를 빌드 전 가드로 검증하라. (60% · 타 앱 1회 — 맹신 금지)
