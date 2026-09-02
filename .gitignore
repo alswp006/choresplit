@@ -1,0 +1,24 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+coverage/
+test-results/
+playwright-report/
+e2e/.last-run.json
+e2e/__shots__/
+
+# 파이프라인이 쓰는 밤-넘는 맥락 — 지난 앱들의 교훈·에러 문구가 들어 있어
+# 공개 레포에 커밋되면 안 된다(GH013 계열). .ai-factory/ 전체를 막지 않는 이유:
+# kits/·spec.md·shared-context.md는 Manual Mode가 clone 후 필요로 한다.
+.ai-factory/topics/
+.ai-factory/nightly-lessons.md
+
+# 폰 미리보기 산출물 — 파이프라인이 매번 재생성한다. .preview-dist는 내부에 고아 git을
+# 만들어 gh-pages로 밀므로, 앱 레포에 섞이면 임베디드 레포 경고·오염이 생긴다.
+.preview-dist/
+.preview-shim/
+
+# 페르소나 수복 증거 프레임 — 파이프라인이 쓰고 치우는 임시 파일(커밋 금지)
+__frame-*.jpeg
