@@ -1,6 +1,8 @@
 import { Routes, Route } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import Home from './pages/Home';
+import Onboarding from './pages/Onboarding';
+import { AppStateProvider } from './lib/store';
 
 // Dev-only TDS Gallery route — `import.meta.env.DEV` is statically replaced
 // (true in dev, false in prod) so the entire import + Route is tree-shaken
@@ -11,18 +13,21 @@ const DevTdsGallery = import.meta.env.DEV
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      {DevTdsGallery && (
-        <Route
-          path="/__tds-gallery"
-          element={
-            <Suspense fallback={null}>
-              <DevTdsGallery />
-            </Suspense>
-          }
-        />
-      )}
-    </Routes>
+    <AppStateProvider>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/onboarding" element={<Onboarding />} />
+        {DevTdsGallery && (
+          <Route
+            path="/__tds-gallery"
+            element={
+              <Suspense fallback={null}>
+                <DevTdsGallery />
+              </Suspense>
+            }
+          />
+        )}
+      </Routes>
+    </AppStateProvider>
   );
 }
